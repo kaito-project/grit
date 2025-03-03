@@ -1,6 +1,7 @@
 [default.extend-words]
 Ded = "Ded"
 rsource = "rsource"
+AKS = "AKS"
 
 [default.extend-identifiers]
 ObjectCreater = "ObjectCreater"

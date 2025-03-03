@@ -3,6 +3,12 @@ kind: Pod
 metadata:
   name: storage-test
 spec:
+  hostNetwork: true
+  tolerations:
+    - key: "sku"
+      operator: "Equal"
+      value: "gpu"
+      effect: "NoSchedule"
   containers:
   - name: test-container
     image: ubuntu:20.04
@@ -19,4 +25,4 @@ spec:
       type: DirectoryOrCreate
   - name: pvc-data
     persistentVolumeClaim:
-      claimName: azurefile-pvc
+      claimName: azure-file-share-pvc

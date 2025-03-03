@@ -1,7 +1,7 @@
 #!/bin/bash
 
-src="/mnt/host-data/test50GB"
-dest="/mnt/pvc-data/test50GB_copy"
+src="/mnt/pvc-data/test50GB"
+dest="/mnt/host-data/test50GB_copy"
 iterations=${1:-5}
 file_size=53687091200
 total_speed=0
@@ -14,7 +14,8 @@ for i in $(seq 1 $iterations); do
     rm -f "$dest"
     
     start=$(date +%s.%N)
-    cp "$src" "$dest"
+    #dd if=$src of=$dest bs=1M conv=noerror,sync
+    cp $src $dest
     end=$(date +%s.%N)
     
     duration=$(echo "$end - $start" | bc -l)

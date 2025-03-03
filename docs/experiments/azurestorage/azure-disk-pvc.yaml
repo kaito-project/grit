@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: azurefile-pvc
+  name: azure-disk-pvc
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: azurefile-premium
+  storageClassName: managed-csi-premium
   resources:
     requests:
-      storage: 100Gi
+      storage: 8192Gi
