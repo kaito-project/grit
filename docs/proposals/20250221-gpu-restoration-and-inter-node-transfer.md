@@ -15,7 +15,7 @@ see-also:
 
 ## Table of Contents
 
-- [GRIT: GPU state restoration via inter-node transmission](#grit-gpu-state-restoration-via-inter-node-transmission)
+- [GRIT: GPU workload restoration via inter-node checkpoint transmission](#grit-gpu-workload-restoration-via-inter-node-checkpoint-transmission)
   - [Table of Contents](#table-of-contents)
   - [Glossary](#glossary)
   - [Summary](#summary)
@@ -153,10 +153,10 @@ type CheckpointSpec struct {
   // VolumeClaim is used to specify cloud storage for storing checkpoint data and share data across nodes.
   // End user should ensure related pvc/pv resource exist and ready before creating Checkpoint resource.
   VolumeClaim *corev1.PersistentVolumeClaim
-	// AutoMigration is used for migrating pod across nodes automatically. If true is set, related Restore resource will be created automatically, then checkpointed pod will be deleted by grit-manager, and a new pod will be created automatically by the pod owner(like Deployment and Job). this new pod will be selected as restoration pod and checkpointed data will be used for restoring new pod.
-	// This field can be set to true for the following two cases:
-	// 1. owner reference of pod is Deployment or Job.
-	// 2. VolumeClaim field is specified as a cloud storage, this means checkpointed data can be shared across nodes.
+  // AutoMigration is used for migrating pod across nodes automatically. If true is set, related Restore resource will be created automatically, then checkpointed pod will be deleted by grit-manager, and a new pod will be created automatically by the pod owner(like Deployment and Job). this new pod will be selected as restoration pod and checkpointed data will be used for restoring new pod.
+  // This field can be set to true for the following two cases:
+  // 1. owner reference of pod is Deployment or Job.
+  // 2. VolumeClaim field is specified as a cloud storage, this means checkpointed data can be shared across nodes.
   AutoMigration bool
 }
 
@@ -192,10 +192,10 @@ type RestoreSpec struct {
   // CheckpointName is used to specify Checkpoint resource. only Checkpoint in the same namespace of Restore will be selected.
   // Only checkpointed Checkpoint will be accepted, and checkpointed data will be used for restoring pod.
   CheckpointName string
-	// Pod will be selected as target pod for restoring with following conditions:
-	// 1. pod has labels which match this selector
-	// 2. pod spec has the same hash value corresponding to Checkpoint.
-	Selector *metav1.LabelSelector
+  // Pod will be selected as target pod for restoring with following conditions:
+  // 1. pod has labels which match this selector
+  // 2. pod spec has the same hash value corresponding to Checkpoint.
+  Selector *metav1.LabelSelector
 }
 
 type RestoreStatus struct {

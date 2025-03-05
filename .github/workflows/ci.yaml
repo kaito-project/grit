@@ -9,7 +9,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  GO_VERSION: '1.22.3'
+  GO_VERSION: '1.23.4'
 
 jobs:
   check-files:
@@ -17,24 +17,33 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - name: Check spelling with custom config file
         uses: crate-ci/typos@v1.29.9
         with:
           config: ./.github/typos.toml
-
       - name: Link Checker
         uses: lycheeverse/lychee-action@v2
         with:
           args: --base . --verbose --no-progress './**/*.md'
           fail: false
-
       - name: Verify Mod
         run: make verify-mod
-
       - name: Verify Manifests
         run: make verify-manifests
-
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Lint golang code
+        run: make lint

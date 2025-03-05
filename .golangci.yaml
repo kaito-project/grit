@@ -1,0 +1,29 @@
+run:
+  timeout: 15m
+
+linters-settings:
+  gci:
+    skip-generated: true
+    sections:
+      - standard
+      - prefix(github.com/kaito-project)
+      - default
+
+linters:
+  disable-all: true
+  enable:
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - nilerr
+    - prealloc
+    - typecheck
+    - unused
+    - gci
+    - gofmt
+    - goimports
+    - staticcheck
+  # Run with --fast=false for more extensive checks
+  fast: true
