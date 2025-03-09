@@ -1,0 +1,14 @@
+{
+    "metadata": {
+        "name": "nginx-sandbox",
+        "namespace": "default",
+        "attempt": 1,
+        "uid": "hdishd83djaidwnduwk28bcsb"
+    },
+    "annotations": {
+        "grit.dev/creation-mode": "restore"
+    },
+    "log_directory": "/mnt/grit-runtime/logs",
+     "linux": {
+  }
+}

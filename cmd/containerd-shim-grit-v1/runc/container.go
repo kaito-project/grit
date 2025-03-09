@@ -32,10 +32,15 @@ import (
 	"github.com/containerd/console"
 	"github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/containerd/api/types/runc/options"
+	runtimeoptions "github.com/containerd/containerd/api/types/runtimeoptions/v1"
+	"github.com/containerd/containerd/archive"
+	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"github.com/containerd/log"
 	"github.com/containerd/typeurl/v2"
+
+	crmetadata "github.com/checkpoint-restore/checkpointctl/lib"
 
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
@@ -50,15 +55,24 @@ func NewContainer(ctx context.Context, platform stdio.Platform, r *task.CreateTa
 		return nil, fmt.Errorf("create namespace: %w", err)
 	}
 
+	ropts := &runtimeoptions.Options{}
 	opts := &options.Options{}
-	if r.Options.GetValue() != nil {
-		v, err := typeurl.UnmarshalAny(r.Options)
+	if ropts.GetConfigBody() != nil {
+		v, err := typeurl.UnmarshalByTypeURL(ropts.GetTypeUrl(), ropts.GetConfigBody())
 		if err != nil {
 			return nil, err
 		}
 		if v != nil {
 			opts = v.(*options.Options)
 		}
+	}
+
+	ckptOpts, err := ReadCheckpointOpts(r.Bundle)
+	if ckptOpts != nil {
+		log.G(ctx).Infof("Set checkpoint to %s", ckptOpts.Checkpoint)
+		r.Checkpoint = ckptOpts.Checkpoint
+	} else if err != nil {
+		log.G(ctx).WithError(err).Error("failed to read checkpoint options")
 	}
 
 	var pmounts []process.Mount
@@ -119,6 +133,41 @@ func NewContainer(ctx context.Context, platform stdio.Platform, r *task.CreateTa
 	}()
 	if err := mount.All(mounts, rootfs); err != nil {
 		return nil, fmt.Errorf("failed to mount rootfs component: %w", err)
+	}
+
+	if r.Checkpoint != "" {
+		// Unpack rootfs-diff.tar if it exists.
+		// This needs to happen before the 'Start()'.
+		rootfsDiff := filepath.Join(r.Checkpoint, "..", crmetadata.RootFsDiffTar)
+
+		_, err = os.Stat(rootfsDiff)
+		if err == nil {
+			rootfsDiffTar, err := os.Open(rootfsDiff)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open rootfs-diff archive %s for import: %w", rootfsDiffTar.Name(), err)
+			}
+			defer func(f *os.File) {
+				if err := f.Close(); err != nil {
+					log.G(ctx).Errorf("Unable to close file %s: %q", f.Name(), err)
+				}
+			}(rootfsDiffTar)
+
+			decompressed, err := compression.DecompressStream(rootfsDiffTar)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decompress archive %s for import: %w", rootfsDiffTar.Name(), err)
+			}
+
+			_, err = archive.Apply(
+				ctx,
+				rootfs,
+				decompressed,
+			)
+
+			if err != nil {
+				return nil, fmt.Errorf("unpacking of rootfs-diff archive %s into %s failed: %w", rootfsDiffTar.Name(), rootfs, err)
+			}
+			log.G(ctx).Debugf("Unpacked checkpoint in %s", rootfs)
+		}
 	}
 
 	p, err := newInit(

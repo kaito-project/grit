@@ -1,0 +1,35 @@
+{
+    "metadata":{
+       "name":"tuning"
+    },
+    "image":{
+       "image":"aimodelsregistrytest.azurecr.io/falcon-7b:0.0.8"
+    },
+    "command":[
+       "python3",
+       "/workspace/tfs/fine_tuning.py"
+    ],
+    "mounts":[
+       {
+          "host_path":"/mnt/grit-runtime/workspace/data",
+          "container_path":"/mnt/data",
+          "readonly":true
+       },
+       {
+          "host_path":"/mnt/grit-runtime/workspace/config",
+          "container_path":"/mnt/config",
+          "readonly":true
+       },
+       {
+          "host_path":"/mnt/grit-runtime/workspace/results",
+          "container_path":"/mnt/results",
+          "readonly":false
+       }
+    ],
+    "CDI_devices":[
+       {
+          "name":"nvidia.com/gpu=all"
+       }
+    ],
+    "log_path":"container.log"
+}

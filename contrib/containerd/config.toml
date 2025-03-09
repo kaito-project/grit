@@ -1,0 +1,111 @@
+version = 3
+
+[plugins]
+
+  [plugins."io.containerd.cri.v1.images"]
+    disable_snapshot_annotations = true
+    discard_unpacked_layers = false
+    image_pull_progress_timeout = "5m0s"
+    image_pull_with_sync_fs = false
+    max_concurrent_downloads = 3
+    snapshotter = "overlayfs"
+    stats_collect_period = 10
+
+    [plugins."io.containerd.cri.v1.images".image_decryption]
+      key_model = "node"
+
+    [plugins."io.containerd.cri.v1.images".pinned_images]
+      sandbox = "registry.k8s.io/pause:3.10"
+
+    [plugins."io.containerd.cri.v1.images".registry]
+      config_path = ""
+
+  [plugins."io.containerd.cri.v1.runtime"]
+    cdi_spec_dirs = ["/etc/cdi", "/var/run/cdi"]  # enable cdi
+    device_ownership_from_security_context = false
+    disable_apparmor = false
+    disable_cgroup = false
+    disable_hugetlb_controller = true
+    disable_proc_mount = false
+    drain_exec_sync_io_timeout = "0s"
+    enable_cdi = true
+    enable_selinux = false
+    enable_unprivileged_icmp = true
+    enable_unprivileged_ports = true
+    ignore_deprecation_warnings = []
+    ignore_image_defined_volumes = false
+    max_container_log_line_size = 16384
+    netns_mounts_under_state_dir = false
+    restrict_oom_score_adj = false
+    selinux_category_range = 1024
+    tolerate_missing_hugetlb_controller = true
+    unset_seccomp_profile = ""
+
+    [plugins."io.containerd.cri.v1.runtime".cni]
+      bin_dir = "/opt/cni/bin"
+      conf_dir = "/etc/cni/net.d"
+      conf_template = ""
+      ip_pref = ""
+      max_conf_num = 1
+      setup_serially = false
+      use_internal_loopback = false
+
+    [plugins."io.containerd.cri.v1.runtime".containerd]
+      default_runtime_name = "runc"
+      ignore_blockio_not_enabled_errors = false
+      ignore_rdt_not_enabled_errors = false
+
+      [plugins."io.containerd.cri.v1.runtime".containerd.runtimes]
+
+        [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.grit]
+          base_runtime_spec = ""
+          cni_conf_dir = ""
+          cni_max_conf_num = 0
+          container_annotations = ["grit.dev/*"]   # allow to passthrough annotation to runtime
+          io_type = ""
+          pod_annotations = []
+          privileged_without_host_devices = false
+          privileged_without_host_devices_all_devices_allowed = false
+          runtime_path = ""
+          runtime_type = "io.containerd.grit.v1"
+          sandboxer = "podsandbox"
+          snapshotter = ""
+
+          [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.grit.options]
+            TypeUrl = "type.googleapis.com/containerd.runc.v1.Options"
+            ConfigBody = []
+
+        [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
+          runtime_type = 'io.containerd.runc.v2'
+          runtime_path = ''
+          pod_annotations = []
+          container_annotations = []
+          privileged_without_host_devices = false
+          privileged_without_host_devices_all_devices_allowed = false
+          base_runtime_spec = ''
+          cni_conf_dir = ''
+          cni_max_conf_num = 0
+          snapshotter = ''
+          sandboxer = 'podsandbox'
+          io_type = ''
+
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+            BinaryName = ''
+            CriuImagePath = ''
+            CriuWorkPath = ''
+            IoGid = 0
+            IoUid = 0
+            NoNewKeyring = false
+            Root = ''
+            ShimCgroup = ''
+
+  [plugins."io.containerd.grpc.v1.cri"]
+    disable_tcp_service = true
+    enable_tls_streaming = false
+    stream_idle_timeout = "4h0m0s"
+    stream_server_address = "127.0.0.1"
+    stream_server_port = "0"
+
+    [plugins."io.containerd.grpc.v1.cri".x509_key_pair_streaming]
+      tls_cert_file = ""
+      tls_key_file = ""

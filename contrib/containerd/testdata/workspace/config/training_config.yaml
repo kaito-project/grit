@@ -1,0 +1,32 @@
+   training_config:
+      ModelConfig:
+        torch_dtype: "bfloat16"
+        local_files_only: true
+        device_map: "auto"
+        chat_template: "/workspace/chat_templates/falcon-instruct.jinja"
+
+      QuantizationConfig:
+        load_in_4bit: true
+        bnb_4bit_quant_type: "nf4"
+        bnb_4bit_compute_dtype: "bfloat16"
+        bnb_4bit_use_double_quant: true
+
+      LoraConfig:
+        r: 8
+        lora_alpha: 8
+        lora_dropout: 0.0
+        target_modules: ['query_key_value']
+
+      TrainingArguments:
+        output_dir: "/mnt/results"
+        ddp_find_unused_parameters: false
+        save_strategy: "epoch"
+        per_device_train_batch_size: 1
+        max_steps: 200  # Adding this line to limit training to 2 steps
+
+      DataCollator:
+        mlm: true
+
+      DatasetConfig:
+        shuffle_dataset: true
+        train_test_split: 1

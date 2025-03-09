@@ -4,8 +4,10 @@ go 1.23.4
 
 require (
 	github.com/awslabs/operatorpkg v0.0.0-20250212191036-bf6d68a8adc5
+	github.com/checkpoint-restore/checkpointctl v1.3.0
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/containerd/console v1.0.4
+	github.com/containerd/containerd v1.7.23
 	github.com/containerd/containerd/api v1.8.0
 	github.com/containerd/containerd/v2 v2.0.3
 	github.com/containerd/errdefs v1.0.0
@@ -71,6 +73,7 @@ require (
 	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/mdlayher/vsock v1.2.1 // indirect
 	github.com/moby/sys/mountinfo v0.7.2 // indirect
+	github.com/moby/sys/sequential v0.6.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
