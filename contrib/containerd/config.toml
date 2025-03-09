@@ -57,7 +57,7 @@ version = 3
 
       [plugins."io.containerd.cri.v1.runtime".containerd.runtimes]
 
-        [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.grit]
+        [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.grit]  # add grit runtime
           base_runtime_spec = ""
           cni_conf_dir = ""
           cni_max_conf_num = 0

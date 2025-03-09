@@ -69,7 +69,7 @@ func NewContainer(ctx context.Context, platform stdio.Platform, r *task.CreateTa
 
 	ckptOpts, err := ReadCheckpointOpts(r.Bundle)
 	if ckptOpts != nil {
-		log.G(ctx).Infof("Set checkpoint to %s", ckptOpts.Checkpoint)
+		log.G(ctx).Debugf("set checkpoint to %s", ckptOpts.Checkpoint)
 		r.Checkpoint = ckptOpts.Checkpoint
 	} else if err != nil {
 		log.G(ctx).WithError(err).Error("failed to read checkpoint options")

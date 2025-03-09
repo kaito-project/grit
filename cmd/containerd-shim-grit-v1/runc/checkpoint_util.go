@@ -6,6 +6,12 @@ import (
 	"path"
 )
 
+// Directory structure of a checkpoint:
+// .
+// ├── checkpoint      // checkpoint directory
+// ├── config.dump
+// ├── rootfs-diff.tar // rw layer
+// └── spec.dump
 type CheckpointOpts struct {
 	// Checkpoint digest to restore container state
 	Checkpoint string
