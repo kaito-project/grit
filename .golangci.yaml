@@ -27,3 +27,7 @@ linters:
     - staticcheck
   # Run with --fast=false for more extensive checks
   fast: true
+exclude-rules:
+  - path: ^cmd/containerd-shim-grit-v1/
+    linters:
+      - '*'

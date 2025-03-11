@@ -23,7 +23,7 @@ const (
 
 // spec is a shallow version of [oci.Spec] containing only the
 // fields we need. We use a shallow struct to reduce
-// the overhead of unmarshaling.
+// the overhead of unmarshalling.
 type spec struct {
 	// Annotations contains arbitrary metadata for the container.
 	Annotations map[string]string `json:"annotations,omitempty"`
