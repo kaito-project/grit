@@ -10,6 +10,7 @@ import (
 type RestorePhase string
 
 const (
+	RestoreNone    RestorePhase = "none"
 	RestorePending RestorePhase = "Pending"
 	Restoring      RestorePhase = "Restoring"
 	Restored       RestorePhase = "Restored"
@@ -29,6 +30,9 @@ type RestoreSpec struct {
 }
 
 type RestoreStatus struct {
+	// restoration pod is located on this node
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
 	// the pod specified by TargetPod is selected for restoring.
 	// +optional
 	TargetPod string `json:"targetPod,omitempty"`

@@ -11,24 +11,19 @@ import (
 type CheckpointPhase string
 
 const (
-	CheckpointInitializing CheckpointPhase = "Initializing"
-	CheckpointPending      CheckpointPhase = "Pending"
-	Checkpointing          CheckpointPhase = "Checkpointing"
-	Checkpointed           CheckpointPhase = "Checkpointed"
-	CheckpointMigrating    CheckpointPhase = "Migrating"
-	CheckpointMigrated     CheckpointPhase = "Migrated"
-	CheckpointFailed       CheckpointPhase = "Failed"
+	CheckpointNone      CheckpointPhase = "None"
+	CheckpointPending   CheckpointPhase = "Pending"
+	Checkpointing       CheckpointPhase = "Checkpointing"
+	Checkpointed        CheckpointPhase = "Checkpointed"
+	CheckpointMigrating CheckpointPhase = "Migrating"
+	CheckpointMigrated  CheckpointPhase = "Migrated"
+	CheckpointFailed    CheckpointPhase = "Failed"
 )
 
 type CheckpointSpec struct {
 	// PodName is used to specify pod for checkpointing. only pod in the same namespace of Checkpoint will be selected.
 	// +required
 	PodName string `json:"podName"`
-	// Checkpoint result will be stored under this path on the node.
-	// If no path is set, default value /data/grit/pods will be used.
-	// Moreover, if no enough disk space under this path for storing checkpoint data, checkpoint will fail into failed state.
-	// +optional
-	HostPath *corev1.HostPathVolumeSource `json:"hostPath,omitempty"`
 	// VolumeClaim is used to specify cloud storage for storing checkpoint data and share data across nodes.
 	// End user should ensure related pvc/pv resource exist and ready before creating Checkpoint resource.
 	// +optional

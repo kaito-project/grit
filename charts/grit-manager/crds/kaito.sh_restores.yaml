@@ -172,6 +172,9 @@ spec:
                   - type
                   type: object
                 type: array
+              nodeName:
+                description: restoration pod is located on this node
+                type: string
               phase:
                 description: 'state machine of Restore Phase: Pending --> Restoring
                   --> Restored or Failed.'

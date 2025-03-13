@@ -4,13 +4,9 @@
 package checkpoint
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
-	"strings"
-	"text/template"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -19,19 +15,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
@@ -39,42 +31,14 @@ import (
 )
 
 var (
-	podPredicate = predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			pod, ok := e.Object.(*corev1.Pod)
-			if !ok {
-				return false
-			}
-
-			if isGritAgentPodRunning(pod) {
-				return true
-			}
-			return false
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			pod, ok := e.ObjectNew.(*corev1.Pod)
-			if !ok {
-				return false
-			}
-
-			if isGritAgentPodRunning(pod) {
-				return true
-			}
-			return false
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return false
-		},
+	checkpointConditionOrder = map[string]int{
+		string(v1alpha1.CheckpointPending):   1,
+		string(v1alpha1.Checkpointing):       2,
+		string(v1alpha1.Checkpointed):        3,
+		string(v1alpha1.CheckpointMigrating): 4,
+		string(v1alpha1.CheckpointMigrated):  5,
 	}
 )
-
-func isGritAgentPodRunning(pod *corev1.Pod) bool {
-	if pod.Labels[v1alpha1.GritAgentLabel] == v1alpha1.GritAgentName && pod.Status.Phase == corev1.PodRunning {
-		return true
-	}
-
-	return false
-}
 
 type CheckpointStateHandler func(ctx context.Context, ckpt *v1alpha1.Checkpoint) error
 
@@ -95,10 +59,10 @@ func NewController(clk clock.Clock, kubeClient client.Client, ns string) *Contro
 	// v1alpha1.Checkpointing, v1alpha1.CheckpointFailed, v1alpha1.CheckpointMigrated,
 	// these three states, girt-manager don't need to do anything.
 	c.statesMachine = map[v1alpha1.CheckpointPhase]CheckpointStateHandler{
-		v1alpha1.CheckpointInitializing: c.initializingHandler,
-		v1alpha1.CheckpointPending:      c.pendingHandler,
-		v1alpha1.Checkpointed:           c.checkpointedHandler,
-		v1alpha1.CheckpointMigrating:    c.migratingHandler,
+		v1alpha1.CheckpointNone:      c.initializingHandler,
+		v1alpha1.CheckpointPending:   c.pendingHandler,
+		v1alpha1.Checkpointed:        c.checkpointedHandler,
+		v1alpha1.CheckpointMigrating: c.migratingHandler,
 	}
 
 	return c
@@ -121,7 +85,7 @@ func (c *Controller) Reconcile(ctx context.Context, ckpt *v1alpha1.Checkpoint) (
 
 	// if phase is not CheckpointFailed, we need to remove failed condition
 	if updatedCkpt.Status.Phase != v1alpha1.CheckpointFailed {
-		c.removeCondition(updatedCkpt, string(v1alpha1.CheckpointFailed))
+		util.RemoveCondition(&updatedCkpt.Status.Conditions, string(v1alpha1.CheckpointFailed))
 	}
 
 	if !reflect.DeepEqual(ckpt, updatedCkpt) {
@@ -135,33 +99,24 @@ func (c *Controller) Reconcile(ctx context.Context, ckpt *v1alpha1.Checkpoint) (
 func (c *Controller) resolveLastPhase(ckpt *v1alpha1.Checkpoint) v1alpha1.CheckpointPhase {
 	phase := ckpt.Status.Phase
 	if phase == "" {
-		phase = v1alpha1.CheckpointInitializing
+		phase = v1alpha1.CheckpointNone
 		return phase
 	} else if phase != v1alpha1.CheckpointFailed {
 		return phase
 	}
 
 	// if phase is CheckpointFailed, we need to resolve conditions and find the last phase before failed.
+	maxOrder := -1
 	for _, cond := range ckpt.Status.Conditions {
-		switch cond.Type {
-		case string(v1alpha1.CheckpointPending):
-			if phase != v1alpha1.Checkpointing && phase != v1alpha1.Checkpointed {
-				phase = v1alpha1.CheckpointPending
-			}
-		case string(v1alpha1.Checkpointing):
-			if phase != v1alpha1.Checkpointed {
-				phase = v1alpha1.Checkpointing
-			}
-		case string(v1alpha1.Checkpointed):
-			phase = v1alpha1.Checkpointed
-		default:
-			// skip
+		if order, exists := checkpointConditionOrder[cond.Type]; exists && order > maxOrder {
+			maxOrder = order
+			phase = v1alpha1.CheckpointPhase(cond.Type)
 		}
 	}
 
-	// if there is no conditions, we should fall back to initlizing.
+	// if there is no conditions, we should fall back to the beginning.
 	if phase == v1alpha1.CheckpointFailed {
-		phase = v1alpha1.CheckpointInitializing
+		phase = v1alpha1.CheckpointNone
 	}
 	return phase
 }
@@ -172,7 +127,7 @@ func (c *Controller) initializingHandler(ctx context.Context, ckpt *v1alpha1.Che
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Spec.PodName}, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
 			ckpt.Status.Phase = v1alpha1.CheckpointFailed
-			c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodNotExist", fmt.Sprintf("pod(%s) for checkpoint doesn't exist", ckpt.Spec.PodName))
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodNotExist", fmt.Sprintf("pod(%s) for checkpoint doesn't exist", ckpt.Spec.PodName))
 			return nil
 		}
 		return err
@@ -181,7 +136,7 @@ func (c *Controller) initializingHandler(ctx context.Context, ckpt *v1alpha1.Che
 	ckpt.Status.NodeName = pod.Spec.NodeName
 	ckpt.Status.PodSpecHash = util.ComputeHash(&pod.Spec)
 	ckpt.Status.Phase = v1alpha1.CheckpointPending
-	c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointPending), "InitializingCompleted", "pod spec hash has been configured")
+	util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointPending), "InitializingCompleted", "pod spec hash has been configured")
 	return nil
 }
 
@@ -193,94 +148,22 @@ func (c *Controller) pendingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoi
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Name}, &job); err == nil {
 		if job.Status.Ready != nil && *(job.Status.Ready) == 1 {
 			ckpt.Status.Phase = v1alpha1.Checkpointing
-			c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is ready", job.Namespace, job.Name))
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is ready", job.Namespace, job.Name))
 		}
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	// grit agent job is not found, so go to create a grit agent job
-	// get job template for girt agent component
-	var cm corev1.ConfigMap
-	if err := c.Get(ctx, client.ObjectKey{Namespace: c.workingNamespace, Name: "grit-agent-config"}, &cm); err != nil {
-		if apierrors.IsNotFound(err) {
-			ckpt.Status.Phase = v1alpha1.CheckpointFailed
-			c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "GritAgentConfigNotExist", fmt.Sprintf("ConfigMap(%s/grit-agent-config) for grit-agent doesn't exist", c.workingNamespace))
-			return nil
-		}
-		return err
-	}
-
-	girtAgentJobTemplate := cm.Data["grit-agent.yaml"]
-	templateCtx := map[string]string{
-		"jobName":   ckpt.Name,
-		"namespace": ckpt.Namespace,
-		"nodeName":  ckpt.Status.NodeName,
-	}
-	gritAgentJob, err := convertToGritAgentJob(girtAgentJobTemplate, templateCtx)
+	gritAgentJob, err := util.GenerateGritAgentJob(ctx, c.Client, c.workingNamespace, ckpt, nil)
 	if err != nil {
 		ckpt.Status.Phase = v1alpha1.CheckpointFailed
-		c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "ConvertGritAgentFailed", fmt.Sprintf("failed to convert grit agent job, %v", err))
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "GenerateGritAgentFailed", fmt.Sprintf("failed to generate grit agent job, %v", err))
 		return nil
-	}
-
-	// preare volumes and volume mount for job
-	pvcStorage := corev1.Volume{
-		Name: "pvc-data",
-		VolumeSource: corev1.VolumeSource{
-			PersistentVolumeClaim: ckpt.Spec.VolumeClaim,
-		},
-	}
-	hostStorage := corev1.Volume{
-		Name: "host-data",
-		VolumeSource: corev1.VolumeSource{
-			HostPath: ckpt.Spec.HostPath,
-		},
-	}
-	gritAgentJob.Spec.Template.Spec.Volumes = append(gritAgentJob.Spec.Template.Spec.Volumes, pvcStorage, hostStorage)
-
-	volumeMounts := []corev1.VolumeMount{
-		{
-			Name:      "host-data",
-			MountPath: "/mnt/host-data/ckpt",
-		},
-		{
-			Name:      "pvc-data",
-			MountPath: "/mnt/pvc-data/ckpt",
-		},
-	}
-
-	if len(gritAgentJob.Spec.Template.Spec.Containers) != 0 {
-		gritAgentJob.Spec.Template.Spec.Containers[0].VolumeMounts = append(gritAgentJob.Spec.Template.Spec.Containers[0].VolumeMounts, volumeMounts...)
 	}
 
 	// start to distribute grit agent job
 	return c.Create(ctx, gritAgentJob)
-}
-
-func convertToGritAgentJob(templateStr string, context interface{}) (*batchv1.Job, error) {
-	resourceTemplate, err := template.New("grit").Option("missingkey=zero").Parse(templateStr)
-	if err != nil {
-		return nil, err
-	}
-
-	w := bytes.NewBuffer([]byte{})
-	if err := resourceTemplate.Execute(w, context); err != nil {
-		return nil, err
-	}
-
-	jobObj, _, err := scheme.Codecs.UniversalDeserializer().Decode(w.Bytes(), nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	gritAgentJob, ok := jobObj.(*batchv1.Job)
-	if !ok {
-		return nil, errors.New("couldn't convert grit agent job")
-	}
-
-	return gritAgentJob, nil
 }
 
 // checkpointedHandler is used for garbage collecting grit agent pod. then pvc for cloud storage can be used for restoring.
@@ -296,7 +179,7 @@ func (c *Controller) checkpointedHandler(ctx context.Context, ckpt *v1alpha1.Che
 	} else { // grit agent job is deleted
 		if ckpt.Spec.AutoMigration {
 			ckpt.Status.Phase = v1alpha1.CheckpointMigrating
-			c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointMigrating), "CheckpointedCompleted", "auto migrating is true and checkpoint task is completed.")
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointMigrating), "CheckpointedCompleted", "auto migrating is true and checkpoint task is completed.")
 		}
 	}
 
@@ -310,7 +193,7 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Spec.PodName}, &checkpointPod); err != nil {
 		if apierrors.IsNotFound(err) {
 			ckpt.Status.Phase = v1alpha1.CheckpointFailed
-			c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodIsRemoved", fmt.Sprintf("migrating pod(%s) in checkpoint has been removed", ckpt.Spec.PodName))
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodIsRemoved", fmt.Sprintf("migrating pod(%s) in checkpoint has been removed", ckpt.Spec.PodName))
 		} else {
 			return err
 		}
@@ -320,7 +203,7 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 	labelSelector, err := c.GetOwnerLabelSelector(ctx, &checkpointPod)
 	if err != nil {
 		ckpt.Status.Phase = v1alpha1.CheckpointFailed
-		c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "OwnerLabelSelectorNotFound", err.Error())
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "OwnerLabelSelectorNotFound", err.Error())
 		return nil
 	}
 
@@ -349,17 +232,8 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 	}
 
 	ckpt.Status.Phase = v1alpha1.CheckpointMigrated
-	c.updateCondition(ckpt, metav1.ConditionTrue, string(v1alpha1.CheckpointMigrated), "AutoMigratingCompleted", "restore resource is created and checkpoint pod is removed.")
+	util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointMigrated), "AutoMigratingCompleted", "restore resource is created and checkpoint pod is removed.")
 	return nil
-}
-
-func ParseGroupVersion(apiVersion string) schema.GroupVersion {
-	parts := strings.Split(apiVersion, "/")
-	if len(parts) == 1 {
-		return schema.GroupVersion{Group: "", Version: parts[0]}
-	}
-
-	return schema.GroupVersion{Group: parts[0], Version: parts[1]}
 }
 
 func (c *Controller) GetOwnerLabelSelector(ctx context.Context, pod *corev1.Pod) (map[string]string, error) {
@@ -368,10 +242,7 @@ func (c *Controller) GetOwnerLabelSelector(ctx context.Context, pod *corev1.Pod)
 	}
 
 	ownerRef := pod.OwnerReferences[0]
-	gv := ParseGroupVersion(ownerRef.APIVersion)
-	gvk := schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: ownerRef.Kind}
-
-	switch gvk.Kind {
+	switch ownerRef.Kind {
 	case "Deployment":
 		owner := &appsv1.Deployment{}
 		if err := c.Get(ctx, client.ObjectKey{Name: ownerRef.Name, Namespace: pod.Namespace}, owner); err != nil {
@@ -409,47 +280,7 @@ func (c *Controller) GetOwnerLabelSelector(ctx context.Context, pod *corev1.Pod)
 		return owner.Labels, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported owner kind: %s", gvk.Kind)
-	}
-}
-
-func (c *Controller) updateCondition(ckpt *v1alpha1.Checkpoint, status metav1.ConditionStatus, conditionType, reason, message string) {
-	newCondition := metav1.Condition{
-		Type:               conditionType,
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		LastTransitionTime: metav1.NewTime(c.clock.Now()),
-	}
-
-	for i, cond := range ckpt.Status.Conditions {
-		if cond.Type == conditionType {
-			// if the same condition exists, there is no need to update condition.
-			if cond.Status == status &&
-				cond.Reason == reason &&
-				cond.Message == message {
-				return
-			}
-			ckpt.Status.Conditions[i] = newCondition
-			return
-		}
-	}
-
-	ckpt.Status.Conditions = append(ckpt.Status.Conditions, newCondition)
-}
-
-func (c *Controller) removeCondition(ckpt *v1alpha1.Checkpoint, conditionType string) {
-	idx := -1
-	for i, cond := range ckpt.Status.Conditions {
-		if cond.Type != conditionType {
-			idx = i
-			break
-		}
-	}
-
-	if idx != -1 {
-		ckpt.Status.Conditions[idx] = ckpt.Status.Conditions[len(ckpt.Status.Conditions)-1]
-		ckpt.Status.Conditions = ckpt.Status.Conditions[:len(ckpt.Status.Conditions)-1]
+		return nil, fmt.Errorf("unsupported owner kind: %s", ownerRef.Kind)
 	}
 }
 
@@ -457,7 +288,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("checkpoint.lifecycle").
 		For(&v1alpha1.Checkpoint{}).
-		Watches(&corev1.Pod{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(podPredicate)).
+		Watches(&batchv1.Job{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(util.GritAgentJobPredicate)).
 		WithOptions(controller.Options{
 			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
 				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, 300*time.Second),

@@ -4,18 +4,17 @@ metadata:
   name: grit-agent-config
   namespace: {{ .Release.Namespace }}
 data:
+  host-path: "/var/lib/grit-agent"
   grit-agent.yaml: |
     apiVersion: batch/v1
     kind: Job
     metadata:
       name: {{.jobName}}
       namespace: {{.namespace}}
+      labels:
+        grit.dev/helper: grit-agent
     spec:
       template:
-        metadata:
-          name: {{.jobName}}
-          labels:
-            grit.dev/helper: grit-agent
         spec:
           hostNetwork: true
           restartPolicy: OnFailure
@@ -25,4 +24,5 @@ data:
           containers:
           - name: grit-agent
             image: kaito.sh/grit-agent:latest
+            command: ["/usr/local/bin/grit-agent"]
             imagePullPolicy: IfNotPresent
