@@ -32,6 +32,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/stdio"
 	"github.com/containerd/fifo"
+
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/process"
 )
 

@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/containerd/containerd/v2/pkg/shim"
+
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/manager"
 	_ "github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/task/plugin"
 )

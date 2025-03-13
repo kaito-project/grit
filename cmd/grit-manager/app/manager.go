@@ -15,6 +15,7 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -117,7 +118,7 @@ func Run(opts *options.GritManagerOptions) error {
 	lo.Must0(mgr.AddReadyzCheck("readyz", healthz.Ping))
 
 	// initialize controllers
-	controllers := controllers.NewControllers(mgr)
+	controllers := controllers.NewControllers(mgr, clock.RealClock{}, opts.WorkingNamespace)
 	for _, c := range controllers {
 		lo.Must0(c.Register(ctx, mgr))
 	}

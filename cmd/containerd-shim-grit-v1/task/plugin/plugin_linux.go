@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/plugin"
 	"github.com/containerd/plugin/registry"
+
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/task"
 )
 

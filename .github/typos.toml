@@ -2,6 +2,7 @@
 Ded = "Ded"
 rsource = "rsource"
 AKS = "AKS"
+stopp = "stopp"
 
 [default.extend-identifiers]
 ObjectCreater = "ObjectCreater"

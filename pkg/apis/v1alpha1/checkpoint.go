@@ -11,10 +11,13 @@ import (
 type CheckpointPhase string
 
 const (
-	CheckpointPending CheckpointPhase = "Pending"
-	Checkpointing     CheckpointPhase = "Checkpointing"
-	Checkpointed      CheckpointPhase = "Checkpointed"
-	CheckpointFailed  CheckpointPhase = "Failed"
+	CheckpointInitializing CheckpointPhase = "Initializing"
+	CheckpointPending      CheckpointPhase = "Pending"
+	Checkpointing          CheckpointPhase = "Checkpointing"
+	Checkpointed           CheckpointPhase = "Checkpointed"
+	CheckpointMigrating    CheckpointPhase = "Migrating"
+	CheckpointMigrated     CheckpointPhase = "Migrated"
+	CheckpointFailed       CheckpointPhase = "Failed"
 )
 
 type CheckpointSpec struct {
@@ -29,7 +32,7 @@ type CheckpointSpec struct {
 	// VolumeClaim is used to specify cloud storage for storing checkpoint data and share data across nodes.
 	// End user should ensure related pvc/pv resource exist and ready before creating Checkpoint resource.
 	// +optional
-	VolumeClaim *corev1.PersistentVolumeClaim `json:"volumeClaim,omitempty"`
+	VolumeClaim *corev1.PersistentVolumeClaimVolumeSource `json:"volumeClaim,omitempty"`
 	// AutoMigration is used for migrating pod across nodes automatically. If true is set, related Restore resource will be created automatically, then checkpointed pod will be deleted by grit-manager, and a new pod will be created automatically by the pod owner(like Deployment and Job). this new pod will be selected as restoration pod and checkpointed data will be used for restoring new pod.
 	// This field can be set to true for the following two cases:
 	// 1. owner reference of pod is Deployment or Job.
@@ -39,6 +42,9 @@ type CheckpointSpec struct {
 }
 
 type CheckpointStatus struct {
+	// checkpointed pod is located on this node
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
 	// PodSpecHash is used for recording hash value of pod spec.
 	// Checkpointed data can be used to restore for pod with same hash value.
 	// +optional

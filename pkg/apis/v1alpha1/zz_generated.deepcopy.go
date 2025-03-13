@@ -82,8 +82,8 @@ func (in *CheckpointSpec) DeepCopyInto(out *CheckpointSpec) {
 	}
 	if in.VolumeClaim != nil {
 		in, out := &in.VolumeClaim, &out.VolumeClaim
-		*out = new(v1.PersistentVolumeClaim)
-		(*in).DeepCopyInto(*out)
+		*out = new(v1.PersistentVolumeClaimVolumeSource)
+		**out = **in
 	}
 }
 

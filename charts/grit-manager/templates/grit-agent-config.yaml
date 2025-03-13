@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grit-agent-config
+  namespace: {{ .Release.Namespace }}
+data:
+  grit-agent.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{.jobName}}
+      namespace: {{.namespace}}
+    spec:
+      template:
+        metadata:
+          name: {{.jobName}}
+          labels:
+            grit.dev/helper: grit-agent
+        spec:
+          hostNetwork: true
+          restartPolicy: OnFailure
+          nodeName: {{.nodeName}}
+          tolerations:
+          - operator: "Exists"
+          containers:
+          - name: grit-agent
+            image: kaito.sh/grit-agent:latest
+            imagePullPolicy: IfNotPresent

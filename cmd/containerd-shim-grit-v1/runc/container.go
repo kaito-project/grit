@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	crmetadata "github.com/checkpoint-restore/checkpointctl/lib"
 	"github.com/containerd/cgroups/v3"
 	"github.com/containerd/cgroups/v3/cgroup1"
 	cgroupsv2 "github.com/containerd/cgroups/v3/cgroup2"
@@ -35,16 +36,14 @@ import (
 	runtimeoptions "github.com/containerd/containerd/api/types/runtimeoptions/v1"
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
+	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/pkg/stdio"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"github.com/containerd/log"
 	"github.com/containerd/typeurl/v2"
 
-	crmetadata "github.com/checkpoint-restore/checkpointctl/lib"
-
-	"github.com/containerd/containerd/v2/core/mount"
-	"github.com/containerd/containerd/v2/pkg/namespaces"
-	"github.com/containerd/containerd/v2/pkg/stdio"
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/process"
 )
 

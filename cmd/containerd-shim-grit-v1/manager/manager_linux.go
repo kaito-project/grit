@@ -45,10 +45,11 @@ import (
 	runcC "github.com/containerd/go-runc"
 	"github.com/containerd/log"
 	"github.com/containerd/typeurl/v2"
-	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/process"
-	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/runc"
 	"github.com/opencontainers/runtime-spec/specs-go/features"
 	"golang.org/x/sys/unix"
+
+	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/process"
+	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/runc"
 )
 
 // NewShimManager returns an implementation of the shim manager

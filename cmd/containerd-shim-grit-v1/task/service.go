@@ -24,8 +24,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/moby/sys/userns"
-
 	"github.com/containerd/cgroups/v3"
 	"github.com/containerd/cgroups/v3/cgroup1"
 	cgroupsv2 "github.com/containerd/cgroups/v3/cgroup2"
@@ -33,13 +31,6 @@ import (
 	taskAPI "github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/containerd/api/types/runc/options"
 	"github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/errdefs"
-	"github.com/containerd/errdefs/pkg/errgrpc"
-	runcC "github.com/containerd/go-runc"
-	"github.com/containerd/log"
-	"github.com/containerd/ttrpc"
-	"github.com/containerd/typeurl/v2"
-
 	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/oom"
@@ -51,6 +42,14 @@ import (
 	"github.com/containerd/containerd/v2/pkg/shutdown"
 	"github.com/containerd/containerd/v2/pkg/stdio"
 	"github.com/containerd/containerd/v2/pkg/sys/reaper"
+	"github.com/containerd/errdefs"
+	"github.com/containerd/errdefs/pkg/errgrpc"
+	runcC "github.com/containerd/go-runc"
+	"github.com/containerd/log"
+	"github.com/containerd/ttrpc"
+	"github.com/containerd/typeurl/v2"
+	"github.com/moby/sys/userns"
+
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/process"
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/runc"
 )
