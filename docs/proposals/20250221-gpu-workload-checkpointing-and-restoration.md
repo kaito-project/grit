@@ -72,8 +72,8 @@ will be deleted, and a new pod will be created and restored using with checkpoin
 
 GRIT components:
 - GRIT-Manager: used as a control-plane component for GRIT, including all controllers and webhooks for checkpointing and restoration.
-- GRIT-Agent: used in both checkpointing and restoration workflows. It runs as Job Pod created by the GRIT-manager. 
-- GRIT-runtime: it is a containerd shim sitting between kubelet and containerd, and used for executing CRIU commands, it will also coordinate with the GRIT-Agent during checkpointing and restoration.
+- GRIT-Agent: used in both checkpointing and restoration workflows. It runs as Job Pod created by the GRIT-manager.
+- GRIT-runtime: it is a pluggable container runtime sitting between kubelet and containerd, receiving control plane signal from GRIT-Agent. it ultimately calls CRIU tools to checkpoint and restore the container process.
 
 **Checkpoint Workflow**
 
@@ -111,8 +111,8 @@ Moreover, if the `autoMigration` field is set in the Checkpoint CR, GRIT control
 4. Sync checkpoint data:
     - Data syncer in GRIT Agent job will download checkpoint data from the volume specified in the checkpoint CR to local disk immediately once the pod is running.
 5. Restore the Pod:
-    - GRIT runtime will block in `CreateSandbox` call if the **magic** annotation is available in the Pod, waiting for the agent pod to download all checkpoint data, signaled by a sentinel file. 
-    - GRIT runtime will intercept the `CreateContainer` call to restore the container from the checkpoint data.
+    - GRIT runtime will block in `PullImage` call if the **magic** annotation is available in the Pod, waiting for the agent pod to download all checkpoint data, signaled by a sentinel file. 
+    - GRIT containerd shim will intercept the `StartContainer` call to restore the container from the checkpoint data.
     - GRIT Agent job pod will update Restore status to Restored when pod restoration completed successfully.
 
 ### State Machines
@@ -221,8 +221,65 @@ type Restore struct {
 
 ### GRIT-Agent
 
+GRIT-Agent is responsible for packing checkpoint images and sync to cloud storage.
+
 ### GRIT-Runtime
+
+GRIT-Runtime is responsible for creating checkpoint images and restoring container processes using CRIU.
+
+![grit-runtime-arch](../img/grit-runtime-arch.png)
+
+There are two parts in GRIT-Runtime:
+- grit-cri-shim:
+  - hijack CRI `PullImages` API. Block waiting for the agent pod to download all checkpoint data.
+- containerd-shim-grit-v1: it is a binary plugin for containerd
+  - hijack `containerd.task.v2.Task.Checkpoint` API. Call runc dump to build checkpoint image.
+  - hijack `containerd.task.v2.Task.Create` API. If the **magic** annotation is available in the Pod, call runc store to start the container from the checkpoint image.
+
+### Image management
+
+There is an oci checkpoint image format defined by containerd. It packages both criu image tarball files and container image into a new oci image.
+When the containerd recognizes this special format of oci image, it will unpack criu images from image layer and perform the restore operation.
+
+GRIT proposes a solution to decouple the checkpoint image and container image. The checkpoint image will be distributed by an external storage. The container image will be pulled from the container registry as usual.
+
+Advantages are as follows:
+1. no need to rebuild a container image. In the era of LLM, both of container image and criu image are very large (> 15GB).
+1. place the checkpoint image in a shared storage, which can be accessed by multiple nodes much faster than container registry.
+
+
+**Checkpoint Image Format**
+
+We manage this image in pods which contains images from different containers in this pod.
+
+The first-level directory is named after the container name. The second-level directory contains criu image files, rootfs write layer and metadata files.
+File naming was defined in https://github.com/checkpoint-restore/checkpointctl/blob/main/lib/metadata.go.
+This image will be archived into a tarball file and stored in the shared storage.
+
+```shell
+<pod-image>/
+├── <container-name-1>/
+│   ├── checkpoint/
+│   │   ├── pages-1.img
+│   │   └── ...
+│   ├── rootfs-diff.tar
+│   ├── config.dump
+│   └── spec.dump
+└─── <container-name-2>/
+    ├── checkpoint/
+    │   ├── pages-1.img
+    │   └── ...
+    ├── rootfs-diff.tar
+    ├── config.dump
+    └── spec.dump
+```
+
+## Alternatives
+
+### No grit containerd-shim
+
+Containerd only supports to restore a container from an oci checkpoint image. It will prepare the rootfs by applying the rootfs-diff layer in engine side, then let containerd-shim to use this rootfs.
+Without introducing a new containerd-shim, we need to make change to containerd engine.
 
 ## Implementation History
 - [ ] 02/24/2025: Open proposal PR
-
