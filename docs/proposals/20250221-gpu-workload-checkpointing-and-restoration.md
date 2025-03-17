@@ -223,6 +223,16 @@ type Restore struct {
 
 GRIT-Agent is responsible for packing checkpoint images and sync to cloud storage.
 
+Each GRIT-Agent share the same host working directory, which is used to store checkpoint data temporarily. The GRIT-Agent will create a subdirectory under the working directory for each checkpoint operation. The subdirectory will be named after the checkpoint CR name.
+
+```shell
+/var/lib/grit-agent/
+├── <checkpoint-cr-name-1>/
+│   ├── checkpoint.tar.gz
+│   └── download-state
+├── <checkpoint-cr-name-2>/
+```
+
 ### GRIT-Runtime
 
 GRIT-Runtime is responsible for creating checkpoint images and restoring container processes using CRIU.
@@ -235,6 +245,15 @@ There are two parts in GRIT-Runtime:
 - containerd-shim-grit-v1: it is a binary plugin for containerd
   - hijack `containerd.task.v2.Task.Checkpoint` API. Call runc dump to build checkpoint image.
   - hijack `containerd.task.v2.Task.Create` API. If the **magic** annotation is available in the Pod, call runc store to start the container from the checkpoint image.
+
+### Limitations
+
+**From cuda-checkpoint**
+- on the restore end it's required that the GPU type and order be the same as the checkpoint side.
+- on the restore end it's required that the GPU driver version be the same as the checkpoint side.
+
+**From criu**
+- CDI is required when inject NVIDIA devices.
 
 ### Image management
 
