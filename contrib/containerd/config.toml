@@ -63,7 +63,7 @@ version = 3
           cni_max_conf_num = 0
           container_annotations = ["grit.dev/*"]   # allow to passthrough annotation to runtime
           io_type = ""
-          pod_annotations = []
+          pod_annotations = ["grit.dev/*"]         # allow to passthrough annotation to runtime
           privileged_without_host_devices = false
           privileged_without_host_devices_all_devices_allowed = false
           runtime_path = ""
@@ -72,8 +72,8 @@ version = 3
           snapshotter = ""
 
           [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.grit.options]
-            TypeUrl = "type.googleapis.com/containerd.runc.v1.Options"
-            ConfigBody = []
+            ConfigPath = "/etc/containerd/grit.toml"
+            TypeUrl = "containerd.runc.v1.Options"
 
         [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
           runtime_type = 'io.containerd.runc.v2'

@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	crmetadata "github.com/checkpoint-restore/checkpointctl/lib"
 	"github.com/containerd/cgroups/v3"
 	"github.com/containerd/cgroups/v3/cgroup1"
 	cgroupsv2 "github.com/containerd/cgroups/v3/cgroup2"
@@ -34,15 +33,16 @@ import (
 	"github.com/containerd/containerd/api/runtime/task/v3"
 	"github.com/containerd/containerd/api/types/runc/options"
 	runtimeoptions "github.com/containerd/containerd/api/types/runtimeoptions/v1"
-	"github.com/containerd/containerd/archive"
-	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/pkg/archive"
+	"github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/stdio"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"github.com/containerd/log"
 	"github.com/containerd/typeurl/v2"
+	"github.com/pelletier/go-toml/v2"
 
 	"github.com/kaito-project/grit/cmd/containerd-shim-grit-v1/process"
 )
@@ -54,24 +54,26 @@ func NewContainer(ctx context.Context, platform stdio.Platform, r *task.CreateTa
 		return nil, fmt.Errorf("create namespace: %w", err)
 	}
 
-	ropts := &runtimeoptions.Options{}
-	opts := &options.Options{}
-	if ropts.GetConfigBody() != nil {
-		v, err := typeurl.UnmarshalByTypeURL(ropts.GetTypeUrl(), ropts.GetConfigBody())
-		if err != nil {
-			return nil, err
-		}
-		if v != nil {
-			opts = v.(*options.Options)
-		}
+	opts, err := readRuntimeOptions(r)
+	if err != nil {
+		return nil, fmt.Errorf("read runtime options: %w", err)
 	}
+	log.G(ctx).Debugf("runtime options: %v", opts)
 
 	ckptOpts, err := ReadCheckpointOpts(r.Bundle)
 	if ckptOpts != nil {
-		log.G(ctx).Debugf("set checkpoint to %s", ckptOpts.Checkpoint)
-		r.Checkpoint = ckptOpts.Checkpoint
+		checkpointPath := ckptOpts.GetCheckpointPath()
+		if _, err := os.Stat(checkpointPath); err == nil {
+			r.Checkpoint = checkpointPath
+		} else if os.IsNotExist(err) {
+			log.G(ctx).Warnf("Checkpoint path %s does not exist, skip restoration", r.Checkpoint)
+		} else {
+			log.G(ctx).WithError(err).Errorf("Error checking checkpoint path %s", r.Checkpoint)
+			return nil, fmt.Errorf("error checking checkpoint path %s: %w", r.Checkpoint, err)
+		}
 	} else if err != nil {
 		log.G(ctx).WithError(err).Error("failed to read checkpoint options")
+		return nil, fmt.Errorf("failed to read checkpoint options: %w", err)
 	}
 
 	var pmounts []process.Mount
@@ -137,7 +139,7 @@ func NewContainer(ctx context.Context, platform stdio.Platform, r *task.CreateTa
 	if r.Checkpoint != "" {
 		// Unpack rootfs-diff.tar if it exists.
 		// This needs to happen before the 'Start()'.
-		rootfsDiff := filepath.Join(r.Checkpoint, "..", crmetadata.RootFsDiffTar)
+		rootfsDiff := ckptOpts.GetRootFsDiffTar()
 
 		_, err = os.Stat(rootfsDiff)
 		if err == nil {
@@ -199,6 +201,45 @@ func NewContainer(ctx context.Context, platform stdio.Platform, r *task.CreateTa
 		}
 	}
 	return container, nil
+}
+
+func readRuntimeOptions(r *task.CreateTaskRequest) (*options.Options, error) {
+	opts := &options.Options{}
+	if r.Options == nil {
+		return opts, nil
+	}
+
+	v, err := typeurl.UnmarshalAny(r.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	o, ok := v.(*runtimeoptions.Options)
+	if !ok {
+		return nil, fmt.Errorf("unknown runtime options type %T", v)
+	}
+
+	if o.ConfigPath == "" {
+		oo, err := typeurl.UnmarshalByTypeURL(o.GetTypeUrl(), o.GetConfigBody())
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := oo.(*options.Options); ok {
+			return oo.(*options.Options), nil
+		}
+		return nil, fmt.Errorf("unknown runtime options type %T", oo)
+	}
+
+	f, err := os.Open(o.ConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	if err := toml.NewDecoder(f).Decode(opts); err != nil {
+		return nil, fmt.Errorf("failed to decode runtime options: %w", err)
+	}
+	return opts, nil
 }
 
 const optionsFilename = "options.json"

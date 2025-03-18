@@ -4,21 +4,33 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+
+	crmetadata "github.com/checkpoint-restore/checkpointctl/lib"
 )
 
-// Directory structure of a checkpoint:
-// .
-// ├── checkpoint      // checkpoint directory
-// ├── config.dump
-// ├── rootfs-diff.tar // rw layer
-// └── spec.dump
 type CheckpointOpts struct {
-	// Checkpoint digest to restore container state
-	Checkpoint string
+	// $CheckpointBaseDir/
+	// ├── checkpoint/
+	// │   ├── pages-1.img
+	// │   └── ...
+	// ├── rootfs-diff.tar
+	// ├── config.dump
+	// └── spec.dump
+	CheckpointBaseDir string
+}
+
+func (c *CheckpointOpts) GetCheckpointPath() string {
+	return path.Join(c.CheckpointBaseDir, crmetadata.CheckpointDirectory)
+}
+
+func (c *CheckpointOpts) GetRootFsDiffTar() string {
+	return path.Join(c.CheckpointBaseDir, crmetadata.RootFsDiffTar)
 }
 
 const (
 	AnnotationGRITCheckpoint = "grit.dev/checkpoint"
+	AnnotationContainerType  = "io.kubernetes.cri.container-type"
+	AnnotationContainerName  = "io.kubernetes.cri.container-name"
 )
 
 // spec is a shallow version of [oci.Spec] containing only the
@@ -50,11 +62,17 @@ func ReadCheckpointOpts(bundle string) (*CheckpointOpts, error) {
 		return nil, err
 	}
 
+	containType := s.Annotations[AnnotationContainerType]
+	if containType != "container" {
+		return nil, nil
+	}
+
 	checkpointPath := s.Annotations[AnnotationGRITCheckpoint]
 	if checkpointPath == "" {
 		return nil, nil
 	}
+	containerName := s.Annotations[AnnotationContainerName]
 	return &CheckpointOpts{
-		Checkpoint: checkpointPath,
+		CheckpointBaseDir: path.Join(checkpointPath, containerName),
 	}, nil
 }

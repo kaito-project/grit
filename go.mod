@@ -7,7 +7,6 @@ require (
 	github.com/checkpoint-restore/checkpointctl v1.3.0
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/containerd/console v1.0.4
-	github.com/containerd/containerd v1.7.23
 	github.com/containerd/containerd/api v1.8.0
 	github.com/containerd/containerd/v2 v2.0.3
 	github.com/containerd/errdefs v1.0.0
@@ -20,6 +19,7 @@ require (
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/moby/sys/userns v0.1.0
 	github.com/opencontainers/runtime-spec v1.2.1
+	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/samber/lo v1.49.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
