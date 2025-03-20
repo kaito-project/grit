@@ -121,6 +121,8 @@ func shouldRenewCert(clk clock.Clock, certPEMBlock, keyPEMBlock []byte) (bool, t
 	return false, timeUntilNextCheck
 }
 
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=list;watch;get;update
+
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("server.secret").

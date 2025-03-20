@@ -199,6 +199,12 @@ func (c *Controller) restoredHandler(ctx context.Context, restore *v1alpha1.Rest
 	return nil
 }
 
+// +kubebuilder:rbac:groups=kaito.sh,resources=restores,verbs=list;watch;get
+// +kubebuilder:rbac:groups=kaito.sh,resources=restores/status,verbs=update
+// +kubebuilder:rbac:groups=kaito.sh,resources=checkpoints,verbs=get
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=list;watch;get;create;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=list;watch
+
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("restore.lifecycle").

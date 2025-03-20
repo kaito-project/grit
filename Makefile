@@ -37,10 +37,11 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=_output/crds
-	cp _output/crds/kaito.sh_checkpoints.yaml charts/grit-manager/crds/
-	cp _output/crds/kaito.sh_restores.yaml charts/grit-manager/crds/
-	rm -rf _output/crds
+	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=charts/grit-manager/crds
+	$(CONTROLLER_GEN) rbac:roleName=grit-manager-clusterrole paths="./pkg/gritmanager/..." output:rbac:artifacts:config=charts/grit-manager/templates
+	$(CONTROLLER_GEN) webhook paths="./pkg/gritmanager/..." output:webhook:artifacts:config=charts/grit-manager/templates
+	mv charts/grit-manager/templates/role.yaml charts/grit-manager/templates/clusterrole-auto-generated.yaml
+	mv charts/grit-manager/templates/manifests.yaml charts/grit-manager/templates/webhooks-auto-generated.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

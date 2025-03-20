@@ -34,6 +34,8 @@ type AgentManager struct {
 	lister    corev1listers.ConfigMapLister
 }
 
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=list;watch
+
 func NewAgentManager(ns string, lister corev1listers.ConfigMapLister) *AgentManager {
 	return &AgentManager{
 		namespace: ns,

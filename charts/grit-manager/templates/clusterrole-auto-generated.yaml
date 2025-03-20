@@ -1,0 +1,65 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grit-manager-clusterrole
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - kaito.sh
+  resources:
+  - checkpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - kaito.sh
+  resources:
+  - checkpoints/status
+  - restores/status
+  verbs:
+  - update
+- apiGroups:
+  - kaito.sh
+  resources:
+  - restores
+  verbs:
+  - create
+  - get
+  - list
+  - watch

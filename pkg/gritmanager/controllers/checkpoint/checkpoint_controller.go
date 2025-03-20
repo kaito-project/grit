@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
-	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -195,29 +194,38 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 		if apierrors.IsNotFound(err) {
 			ckpt.Status.Phase = v1alpha1.CheckpointFailed
 			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodIsRemoved", fmt.Sprintf("migrating pod(%s) in checkpoint has been removed", ckpt.Spec.PodName))
+			return nil
 		} else {
 			return err
 		}
 	}
 
-	// create Restore resource
-	labelSelector, err := c.GetOwnerLabelSelector(ctx, &checkpointPod)
-	if err != nil {
+	// resolve owner reference from checkpoint pod
+	var ownerRef *metav1.OwnerReference
+	for i := range checkpointPod.OwnerReferences {
+		if *checkpointPod.OwnerReferences[i].Controller {
+			ownerRef = &checkpointPod.OwnerReferences[i]
+			break
+		}
+	}
+
+	if ownerRef == nil {
 		ckpt.Status.Phase = v1alpha1.CheckpointFailed
-		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "OwnerLabelSelectorNotFound", err.Error())
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodHasNoOwnerReference", fmt.Sprintf("migrating pod(%s) in checkpoint has no owner reference", ckpt.Spec.PodName))
 		return nil
 	}
 
 	restore := v1alpha1.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ckpt.Name,
+			Name:      "auto-" + ckpt.Name,
 			Namespace: ckpt.Namespace,
+			Annotations: map[string]string{
+				v1alpha1.PodSpecHashLabel: ckpt.Status.PodSpecHash,
+			},
 		},
 		Spec: v1alpha1.RestoreSpec{
 			CheckpointName: ckpt.Name,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labelSelector,
-			},
+			OwnerRef:       *ownerRef,
 		},
 	}
 
@@ -237,53 +245,11 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 	return nil
 }
 
-func (c *Controller) GetOwnerLabelSelector(ctx context.Context, pod *corev1.Pod) (map[string]string, error) {
-	if len(pod.OwnerReferences) == 0 {
-		return nil, fmt.Errorf("pod(%s/%s) has no OwnerReference", pod.Namespace, pod.Name)
-	}
-
-	ownerRef := pod.OwnerReferences[0]
-	switch ownerRef.Kind {
-	case "Deployment":
-		owner := &appsv1.Deployment{}
-		if err := c.Get(ctx, client.ObjectKey{Name: ownerRef.Name, Namespace: pod.Namespace}, owner); err != nil {
-			return nil, err
-		}
-		return owner.Spec.Selector.MatchLabels, nil
-
-	case "ReplicaSet":
-		owner := &appsv1.ReplicaSet{}
-		if err := c.Get(ctx, client.ObjectKey{Name: ownerRef.Name, Namespace: pod.Namespace}, owner); err != nil {
-			return nil, err
-		}
-		return owner.Spec.Selector.MatchLabels, nil
-
-	case "StatefulSet":
-		owner := &appsv1.StatefulSet{}
-		if err := c.Get(ctx, client.ObjectKey{Name: ownerRef.Name, Namespace: pod.Namespace}, owner); err != nil {
-			return nil, err
-		}
-		return owner.Spec.Selector.MatchLabels, nil
-
-	case "DaemonSet":
-		owner := &appsv1.DaemonSet{}
-		if err := c.Get(ctx, client.ObjectKey{Name: ownerRef.Name, Namespace: pod.Namespace}, owner); err != nil {
-			return nil, err
-		}
-		return owner.Spec.Selector.MatchLabels, nil
-
-	case "Job":
-		// Job has no spec.selector，so use metadata.labels instead
-		owner := &batchv1.Job{}
-		if err := c.Get(ctx, client.ObjectKey{Name: ownerRef.Name, Namespace: pod.Namespace}, owner); err != nil {
-			return nil, err
-		}
-		return owner.Labels, nil
-
-	default:
-		return nil, fmt.Errorf("unsupported owner kind: %s", ownerRef.Kind)
-	}
-}
+// +kubebuilder:rbac:groups=kaito.sh,resources=checkpoints,verbs=list;watch;get
+// +kubebuilder:rbac:groups=kaito.sh,resources=checkpoints/status,verbs=update
+// +kubebuilder:rbac:groups=kaito.sh,resources=restores,verbs=create
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=list;watch;get;create;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;delete
 
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
