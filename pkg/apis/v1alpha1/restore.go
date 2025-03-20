@@ -22,11 +22,18 @@ type RestoreSpec struct {
 	// Only checkpointed Checkpoint will be accepted, and checkpointed data will be used for restoring pod.
 	// +required
 	CheckpointName string `json:"checkpointName"`
+	// OwnerRef is used for selecting restoration pod.
+	// Both OwnerRef and Selector are used for selecting restoration pod, and you can choose to use either one of them.
+	// But recommend to use OwnerRef for pods which created by controller(like Deployment).
 	// Pod will be selected as target pod for restoring with following conditions:
-	// 1. pod has labels which match this selector
+	// 1. pod has owner reference which equal to this owner reference.
 	// 2. pod spec has the same hash value corresponding to Checkpoint.
-	// +required
-	Selector *metav1.LabelSelector `json:"selector"`
+	// +optional
+	OwnerRef metav1.OwnerReference `json:"ownerRef,omitempty"`
+	// Selector is also used for selecting restoration pod.
+	// and recommend to use selector for standalone pod.
+	// +optional
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
 }
 
 type RestoreStatus struct {
@@ -62,7 +69,7 @@ type Restore struct {
 // RestoreList contains a list of Restore
 // +kubebuilder:object:root=true
 type RestoreList struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Items             []Restore `json:"items"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Restore `json:"items"`
 }

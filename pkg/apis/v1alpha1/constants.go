@@ -8,4 +8,5 @@ const (
 	GritAgentName           = "grit-agent"
 	CheckpointDataPathLabel = "grit.dev/checkpoint"
 	RestoreNameLabel        = "grit.dev/restore-name"
+	PodSpecHashLabel        = "grit.dev/pod-spec-hash"
 )

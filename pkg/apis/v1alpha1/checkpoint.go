@@ -74,7 +74,7 @@ type Checkpoint struct {
 // CheckpointList contains a list of Checkpoint
 // +kubebuilder:object:root=true
 type CheckpointList struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Items             []Checkpoint `json:"items"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Checkpoint `json:"items"`
 }

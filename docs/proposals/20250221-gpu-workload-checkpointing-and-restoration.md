@@ -30,6 +30,10 @@ see-also:
     - [Checkpoint and Restore API](#checkpoint-and-restore-api)
     - [GRIT-Agent](#grit-agent)
     - [GRIT-Runtime](#grit-runtime)
+    - [Limitations](#limitations)
+    - [Image management](#image-management)
+  - [Alternatives](#alternatives)
+    - [No grit containerd-shim](#no-grit-containerd-shim)
   - [Implementation History](#implementation-history)
 
 ## Glossary
@@ -148,10 +152,6 @@ const (
 type CheckpointSpec struct {
   // PodName is used to specify pod for checkpointing. only pod in the same namespace of Checkpoint will be selected.
   PodName string
-  // Checkpoint result will be stored under this path on the node.
-  // If no path is set, default value /data/grit/pods will be used.
-  // Moreover, if no enough disk space under this path for storing checkpoint data, checkpoint will fail into failed state.
-  HostPath *corev1.HostPathVolumeSource
   // VolumeClaim is used to specify cloud storage for storing checkpoint data and share data across nodes.
   // End user should ensure related pvc/pv resource exist and ready before creating Checkpoint resource.
   VolumeClaim *corev1.PersistentVolumeClaimVolumeSource
@@ -196,13 +196,22 @@ type RestoreSpec struct {
   // CheckpointName is used to specify Checkpoint resource. only Checkpoint in the same namespace of Restore will be selected.
   // Only checkpointed Checkpoint will be accepted, and checkpointed data will be used for restoring pod.
   CheckpointName string
-  // Pod will be selected as target pod for restoring with following conditions:
-  // 1. pod has labels which match this selector
-  // 2. pod spec has the same hash value corresponding to Checkpoint.
-  Selector *metav1.LabelSelector
+  // OwnerRef is used for selecting restoration pod.
+	// Both OwnerRef and Selector are used for selecting restoration pod, and you can choose to use either one of them.
+	// But recommend to use OwnerRef for pods which created by controller(like Deployment).
+	// Pod will be selected as target pod for restoring with following conditions:
+	// 1. pod has owner reference which equal to this owner reference.
+	// 2. pod spec has the same hash value corresponding to Checkpoint.
+	OwnerRef metav1.OwnerReference
+	// Selector is also used for selecting restoration pod.
+	// and recommend to use selector for standalone pod.
+	Selector *metav1.LabelSelector
 }
 
 type RestoreStatus struct {
+  // restoration pod is located on this node
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
   // the pod specified by TargetPod is selected for restoring.
   TargetPod string
   // state machine of Restore Phase: Pending --> Restoring --> Restored or Failed.

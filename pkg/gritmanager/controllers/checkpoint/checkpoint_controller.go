@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
+	"github.com/kaito-project/grit/pkg/gritmanager/agentmanager"
 	"github.com/kaito-project/grit/pkg/gritmanager/controllers/util"
 )
 
@@ -44,16 +45,16 @@ type CheckpointStateHandler func(ctx context.Context, ckpt *v1alpha1.Checkpoint)
 
 type Controller struct {
 	client.Client
-	clock            clock.Clock
-	workingNamespace string
-	statesMachine    map[v1alpha1.CheckpointPhase]CheckpointStateHandler
+	clock         clock.Clock
+	agentManager  *agentmanager.AgentManager
+	statesMachine map[v1alpha1.CheckpointPhase]CheckpointStateHandler
 }
 
-func NewController(clk clock.Clock, kubeClient client.Client, ns string) *Controller {
+func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agentmanager.AgentManager) *Controller {
 	c := &Controller{
-		clock:            clk,
-		Client:           kubeClient,
-		workingNamespace: ns,
+		clock:        clk,
+		Client:       kubeClient,
+		agentManager: agentManager,
 	}
 
 	// v1alpha1.Checkpointing, v1alpha1.CheckpointFailed, v1alpha1.CheckpointMigrated,
@@ -155,7 +156,7 @@ func (c *Controller) pendingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoi
 		return err
 	}
 
-	gritAgentJob, err := util.GenerateGritAgentJob(ctx, c.Client, c.workingNamespace, ckpt, nil)
+	gritAgentJob, err := c.agentManager.GenerateGritAgentJob(ctx, ckpt, nil)
 	if err != nil {
 		ckpt.Status.Phase = v1alpha1.CheckpointFailed
 		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "GenerateGritAgentFailed", fmt.Sprintf("failed to generate grit agent job, %v", err))

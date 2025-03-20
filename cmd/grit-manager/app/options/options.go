@@ -3,6 +3,8 @@
 package options
 
 import (
+	"time"
+
 	"github.com/spf13/pflag"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	componentbaseconfig "k8s.io/component-base/config"
@@ -10,15 +12,18 @@ import (
 )
 
 type GritManagerOptions struct {
-	Version          bool
-	WebhookPort      int
-	MetricsPort      int
-	HealthProbePort  int
-	EnableProfiling  bool
-	LeaderElection   componentbaseconfig.LeaderElectionConfiguration
-	KubeClientQPS    int
-	KubeClientBurst  int
-	WorkingNamespace string
+	Version            bool
+	WebhookPort        int
+	MetricsPort        int
+	HealthProbePort    int
+	EnableProfiling    bool
+	LeaderElection     componentbaseconfig.LeaderElectionConfiguration
+	KubeClientQPS      int
+	KubeClientBurst    int
+	WorkingNamespace   string
+	WebhookSecretName  string
+	WebhookServiceName string
+	ExpirationDuration time.Duration
 }
 
 func NewGritManagerOptions() *GritManagerOptions {
@@ -34,9 +39,12 @@ func NewGritManagerOptions() *GritManagerOptions {
 			ResourceName:      "grit-manager",
 			ResourceNamespace: "kaito-workspace",
 		},
-		KubeClientQPS:    50,
-		KubeClientBurst:  100,
-		WorkingNamespace: "kaito-workspace",
+		KubeClientQPS:      50,
+		KubeClientBurst:    100,
+		WorkingNamespace:   "kaito-workspace",
+		WebhookSecretName:  "grit-webhook-server-tls",
+		WebhookServiceName: "grit-webhook-svc",
+		ExpirationDuration: 10 * 364 * 24 * time.Hour, // 10 years
 	}
 }
 
@@ -50,4 +58,7 @@ func (o *GritManagerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&o.KubeClientQPS, "kube-client-qps", o.KubeClientQPS, "the rate of qps to kube-apiserver.")
 	fs.IntVar(&o.KubeClientBurst, "kube-client-burst", o.KubeClientBurst, "the max allowed burst of queries to the kube-apiserver.")
 	fs.StringVar(&o.WorkingNamespace, "working-namespace", o.WorkingNamespace, "the namespace where the grit-manager is working.")
+	fs.StringVar(&o.WebhookSecretName, "webhook-secret-name", o.WebhookSecretName, "the secret which used for storing certificates for grit webhook")
+	fs.StringVar(&o.WebhookServiceName, "webhook-service-name", o.WebhookServiceName, "the service which used for accessing grit webhook")
+	fs.DurationVar(&o.ExpirationDuration, "tls-expiration", o.ExpirationDuration, "the expiration duration of webhook server certificates")
 }

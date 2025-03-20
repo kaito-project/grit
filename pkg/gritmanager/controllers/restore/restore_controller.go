@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
+	"github.com/kaito-project/grit/pkg/gritmanager/agentmanager"
 	"github.com/kaito-project/grit/pkg/gritmanager/controllers/util"
 )
 
@@ -42,16 +43,16 @@ type RestoreStateHandler func(ctx context.Context, restore *v1alpha1.Restore) er
 
 type Controller struct {
 	client.Client
-	clock            clock.Clock
-	workingNamespace string
-	statesMachine    map[v1alpha1.RestorePhase]RestoreStateHandler
+	clock         clock.Clock
+	agentManager  *agentmanager.AgentManager
+	statesMachine map[v1alpha1.RestorePhase]RestoreStateHandler
 }
 
-func NewController(clk clock.Clock, kubeClient client.Client, ns string) *Controller {
+func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agentmanager.AgentManager) *Controller {
 	c := &Controller{
-		clock:            clk,
-		Client:           kubeClient,
-		workingNamespace: ns,
+		clock:        clk,
+		Client:       kubeClient,
+		agentManager: agentManager,
 	}
 
 	// At v1alpha1.Restoring state, girt-manager don't need to do anything.
@@ -172,7 +173,7 @@ func (c *Controller) pendingHandler(ctx context.Context, restore *v1alpha1.Resto
 		return err
 	}
 
-	gritAgentJob, err := util.GenerateGritAgentJob(ctx, c.Client, c.workingNamespace, &ckpt, restore)
+	gritAgentJob, err := c.agentManager.GenerateGritAgentJob(ctx, &ckpt, restore)
 	if err != nil {
 		restore.Status.Phase = v1alpha1.RestoreFailed
 		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestoreFailed), "GenerateGritAgentFailed", fmt.Sprintf("failed to generate grit agent job, %v", err))
