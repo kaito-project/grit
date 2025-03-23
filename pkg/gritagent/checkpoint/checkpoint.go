@@ -10,6 +10,6 @@ import (
 )
 
 func RunCheckpoint(ctx context.Context, opts *options.GritAgentOptions) error {
-	return runtimeCheckpointPod(ctx, &opts.RuntimeCheckpointOptions)
+	return RuntimeCheckpointPod(ctx, &opts.RuntimeCheckpointOptions)
 	// TODO: add checkpoint data transfer
 }

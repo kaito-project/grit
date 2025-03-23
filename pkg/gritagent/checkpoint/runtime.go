@@ -29,7 +29,7 @@ import (
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
 )
 
-func runtimeCheckpointPod(ctx context.Context, opts *options.RuntimeCheckpointOptions) error {
+func RuntimeCheckpointPod(ctx context.Context, opts *options.RuntimeCheckpointOptions) error {
 	criClient, err := getRuntimeService(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("failed to get runtime service: %w", err)
@@ -133,10 +133,13 @@ func runtimeCheckpointContainer(ctx context.Context, ctrmeta *runtimeapi.Contain
 	// TODO: add config.dump and spec.dump
 
 	// rename the work path to the final checkpoint path
+	logger.Info("Checkpointing container", "step", "rename work path")
 	checkpointDir := path.Join(opts.HostWorkPath, ctrmeta.GetMetadata().GetName())
 	if err := os.Rename(workPath, checkpointDir); err != nil {
 		return fmt.Errorf("failed to rename work path %s to checkpoint path %s: %w", workPath, checkpointDir, err)
 	}
+
+	logger.Info("Checkpointing container successfully")
 
 	return nil
 }
