@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: grit-agent1
+spec:
+  backoffLimit: 3
+  completionMode: NonIndexed
+  completions: 1
+  manualSelector: false
+  parallelism: 1
+  podReplacementPolicy: TerminatingOrFailed
+  template:
+    spec:
+      containers:
+      - name: agent
+        image: qzhuang.azurecr.io/grit-agent:0.0.1
+        imagePullPolicy: Always
+        command:
+        - /grit-agent
+        - --action
+        - checkpoint
+        - --host-work-path
+        - /mnt/grit-agent-work/
+        env:
+        - name: TARGET_NAMESPACE
+          value: "default"
+        - name: TARGET_NAME
+          value: "falcon7b-tuning-2blk6"
+        volumeMounts:
+        - name: checkpoint-volume
+          mountPath: /mnt/grit-agent-work/
+        - name: containerd-sock
+          mountPath: /run/containerd/containerd.sock
+      restartPolicy: Never
+      hostNetwork: true
+      volumes:
+      - name: checkpoint-volume
+        hostPath:
+          path: /mnt/grit-agent-work/
+          type: DirectoryOrCreate
+      - name: containerd-sock
+        hostPath:
+          path: /run/containerd/containerd.sock
+          type: Socket
+      # nodeSelector:
+      #   kubernetes.io/hostname: nvcr
