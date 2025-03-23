@@ -15,9 +15,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/kaito-project/grit/cmd/grit-agent/app/checkpoint"
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
-	"github.com/kaito-project/grit/cmd/grit-agent/app/restore"
+	"github.com/kaito-project/grit/pkg/gritagent/checkpoint"
+	"github.com/kaito-project/grit/pkg/gritagent/restore"
 	"github.com/kaito-project/grit/pkg/injections"
 )
 
