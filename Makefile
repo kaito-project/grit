@@ -1,7 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+REGISTRY ?= YOUR_REGISTRY
 VERSION ?= v0.0.1
+IMG_TAG ?= $(subst v,,$(VERSION))
 GRIT_ROOT ?= $(shell pwd)
 OUTPUT_DIR := $(GRIT_ROOT)/_output
 LOCALBIN ?= $(GRIT_ROOT)/bin
@@ -75,10 +77,43 @@ bin/grit-manager:
 	@mkdir -p $(OUTPUT_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(OUTPUT_DIR)/grit-manager ./cmd/grit-manager/grit-manager.go
 
+.PHONY: bin/grit-agent
+bin/grit-agent:
+	@mkdir -p $(OUTPUT_DIR)
+	go build -ldflags "$(LDFLAGS)" -o $(OUTPUT_DIR)/grit-agent ./cmd/grit-agent/grit-agent.go
+
 .PHONY: bin/containerd-shim-grit-v1
 bin/containerd-shim-grit-v1: cmd/containerd-shim-grit-v1
 	@mkdir -p $(OUTPUT_DIR)
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(OUTPUT_DIR)/containerd-shim-grit-v1 -tags "urfave_cli_no_docs no_grpc" ./cmd/containerd-shim-grit-v1
+
+## --------------------------------------
+## Image Docker Build
+## --------------------------------------
+BUILDX_BUILDER_NAME ?= img-builder
+OUTPUT_TYPE ?= type=registry
+QEMU_VERSION ?= 7.2.0-1
+ARCH ?= amd64,arm64
+BUILDKIT_VERSION ?= v0.18.1
+
+GRIT_AGENT_IMG_NAME ?= grit-agent
+
+.PHONY: docker-buildx
+docker-buildx: ## Build and push docker image for the manager for cross-platform support
+	@if ! docker buildx ls | grep $(BUILDX_BUILDER_NAME); then \
+		docker run --rm --privileged mcr.microsoft.com/mirror/docker/multiarch/qemu-user-static:$(QEMU_VERSION) --reset -p yes; \
+		docker buildx create --name $(BUILDX_BUILDER_NAME) --driver-opt image=mcr.microsoft.com/oss/v2/moby/buildkit:$(BUILDKIT_VERSION) --use; \
+		docker buildx inspect $(BUILDX_BUILDER_NAME) --bootstrap; \
+	fi
+
+.PHONY: docker-build-grit-agent
+docker-build-grit-agent: docker-buildx
+	docker buildx build \
+		--file ./docker/grit-agent/Dockerfile \
+		--output=$(OUTPUT_TYPE) \
+		--platform="linux/$(ARCH)" \
+		--pull \
+		--tag $(REGISTRY)/$(GRIT_AGENT_IMG_NAME):$(IMG_TAG) .
 
 .PHONY: clean
 clean:
