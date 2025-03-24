@@ -55,10 +55,10 @@ func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agen
 		agentManager: agentManager,
 	}
 
-	// At v1alpha1.Restoring state, girt-manager don't need to do anything.
 	c.statesMachine = map[v1alpha1.RestorePhase]RestoreStateHandler{
 		v1alpha1.RestoreNone:    c.initializingHandler,
 		v1alpha1.RestorePending: c.pendingHandler,
+		v1alpha1.Restoring:      c.restoringHandler,
 		v1alpha1.Restored:       c.restoredHandler,
 	}
 
@@ -182,6 +182,28 @@ func (c *Controller) pendingHandler(ctx context.Context, restore *v1alpha1.Resto
 
 	// start to distribute grit agent job
 	return c.Create(ctx, gritAgentJob)
+}
+
+// restoringHandler is used for checking restoration pod is restored or not.
+func (c *Controller) restoringHandler(ctx context.Context, restore *v1alpha1.Restore) error {
+	var restorationPod corev1.Pod
+	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: restore.Status.TargetPod}, &restorationPod); client.IgnoreNotFound(err) != nil {
+		return err
+	} else if err != nil { // pod not found error
+		restore.Status.Phase = v1alpha1.RestoreFailed
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestoreFailed), "RestorationPodNotFound", fmt.Sprintf("failed to find restoration pod(%s) for restore(%s), %v", restore.Status.TargetPod, restore.Name, err))
+		return nil
+	}
+
+	if restorationPod.Status.Phase == corev1.PodFailed {
+		restore.Status.Phase = v1alpha1.RestoreFailed
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestoreFailed), "RestorationPodFailed", fmt.Sprintf("restoration pod(%s) for restore(%s) failed to start", restore.Status.TargetPod, restore.Name))
+	} else if restorationPod.Status.Phase == corev1.PodRunning {
+		restore.Status.Phase = v1alpha1.Restored
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Restored), "RestorationPodRunning", fmt.Sprintf("restoration pod(%s) for restore(%s) is running", restore.Status.TargetPod, restore.Name))
+	}
+
+	return nil
 }
 
 // restoredHandler is used for garbage collecting grit agent pod which used for restoring pod.

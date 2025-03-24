@@ -12,7 +12,7 @@ webhooks:
       namespace: system
       path: /mutate-core-v1-pod
   failurePolicy: Ignore
-  name: mutate.core.v1.pods.kaito.sh
+  name: mutate.core.v1.pods.grit
   rules:
   - apiGroups:
     - ""
@@ -22,4 +22,67 @@ webhooks:
     - CREATE
     resources:
     - pods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-kaito-sh-v1alpha1-restore
+  failurePolicy: Fail
+  name: mutate.kaito.sh.v1alpha1.restore.grit
+  rules:
+  - apiGroups:
+    - kaito.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - restores
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-kaito-sh-v1alpha1-checkpoint
+  failurePolicy: Fail
+  name: validate.kaito.sh.v1alpha1.restore.grit
+  rules:
+  - apiGroups:
+    - kaito.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - checkpoints
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-kaito-sh-v1alpha1-restore
+  failurePolicy: Fail
+  name: validate.kaito.sh.v1alpha1.restore.grit
+  rules:
+  - apiGroups:
+    - kaito.sh
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - restores
   sideEffects: None

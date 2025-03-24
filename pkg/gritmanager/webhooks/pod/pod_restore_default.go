@@ -107,7 +107,7 @@ func (w *PodRestoreWebhook) Default(ctx context.Context, obj runtime.Object) err
 	return nil
 }
 
-// +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,admissionReviewVersions=v1,groups="",resources=pods,verbs=create,versions=v1,name=mutate.core.v1.pods.kaito.sh
+// +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,admissionReviewVersions=v1,groups="",resources=pods,verbs=create,versions=v1,name=mutate.core.v1.pods.grit
 
 func (w *PodRestoreWebhook) Register(_ context.Context, mgr manager.Manager) error {
 	return controllerruntime.NewWebhookManagedBy(mgr).
