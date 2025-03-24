@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes/scheme"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
 	"k8s.io/klog/v2"
@@ -16,10 +17,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
+	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
 	"github.com/kaito-project/grit/pkg/gritagent/checkpoint"
 	"github.com/kaito-project/grit/pkg/gritagent/restore"
 	"github.com/kaito-project/grit/pkg/injections"
 )
+
+func init() {
+	v1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
+}
 
 func NewGritAgentCommand() *cobra.Command {
 	opts := options.NewGritAgentOptions()

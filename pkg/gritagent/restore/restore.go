@@ -7,9 +7,14 @@ import (
 	"context"
 
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
+	"github.com/kaito-project/grit/pkg/gritagent/copy"
 )
 
 func RunRestore(ctx context.Context, opts *options.GritAgentOptions) error {
-	// TODO: add checkpoint data transfer
-	return nil
+	// download checkpointed data from cloud storage
+	if err := copy.TransferData(opts.SrcDir, opts.DstDir); err != nil {
+		return err
+	}
+
+	return copy.CreateSentinelFile(opts.DstDir, copy.DownloadSentinelFileName)
 }
