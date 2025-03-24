@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grit-manager-webhook-certs
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grit-manager-sa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grit-manager.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grit-manager-clusterrole-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grit-manager-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: grit-manager-sa
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grit-manager-webhook-svc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "girt-manager.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: {{ .Values.ports.webhook }}
+      name: https
+    - port: {{ .Values.ports.metrics }}
+      protocol: TCP
+      targetPort: {{ .Values.ports.metrics }}
+      name: metrics
+  selector:
+    {{- include "grit-manager.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "grit-manager.labels" . | nindent 4 }}
+  name: grit-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "grit-manager.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grit-manager.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if not (empty .Values.image.pullSecrets) }}
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | indent 8 }}
+      {{- end }}
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+      containers:
+        - args:
+            - --metrics-port=:{{ .Values.ports.metrics }}
+            - --health-probe-port=:{{ .Values.ports.healthProbe }}
+            - --webhook-port={{ .Values.ports.webhook }}
+            - --working-namespace={{ .Release.Namespace }}
+            {{- if .Values.certDuration }}
+            - --cert-duration={{ .Values.certDuration }}
+            {{- end }}
+          command:
+            - /grit-manager
+          image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: IfNotPresent
+          name: grit-manager
+          ports:
+            - containerPort: {{ .Values.ports.webhook }}
+              name: webhook-server
+              protocol: TCP
+            - containerPort: {{ .Values.ports.metrics }}
+              name: metrics
+              protocol: TCP
+            - containerPort: {{ .Values.ports.healthProbe }}
+              name: health
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.ports.healthProbe }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.ports.healthProbe }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 2
+            periodSeconds: 10
+            failureThreshold: 2
+          {{- if .Values.resources }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- end }}
+      serviceAccountName: grit-manager-sa

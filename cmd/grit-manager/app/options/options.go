@@ -42,8 +42,8 @@ func NewGritManagerOptions() *GritManagerOptions {
 		KubeClientQPS:      50,
 		KubeClientBurst:    100,
 		WorkingNamespace:   "kaito-workspace",
-		WebhookSecretName:  "grit-webhook-server-tls",
-		WebhookServiceName: "grit-webhook-svc",
+		WebhookSecretName:  "grit-manager-webhook-certs",
+		WebhookServiceName: "grit-manager-webhook-svc",
 		ExpirationDuration: 10 * 364 * 24 * time.Hour, // 10 years
 	}
 }
@@ -60,5 +60,5 @@ func (o *GritManagerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.WorkingNamespace, "working-namespace", o.WorkingNamespace, "the namespace where the grit-manager is working.")
 	fs.StringVar(&o.WebhookSecretName, "webhook-secret-name", o.WebhookSecretName, "the secret which used for storing certificates for grit webhook")
 	fs.StringVar(&o.WebhookServiceName, "webhook-service-name", o.WebhookServiceName, "the service which used for accessing grit webhook")
-	fs.DurationVar(&o.ExpirationDuration, "tls-expiration", o.ExpirationDuration, "the expiration duration of webhook server certificates")
+	fs.DurationVar(&o.ExpirationDuration, "cert-duration", o.ExpirationDuration, "the expiration duration of webhook server certificates")
 }

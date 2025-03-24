@@ -16,6 +16,9 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 GOLANGCI_LINT_VERSION ?= v1.61.0
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 
+YQ_VERSION ?= v4.45.1
+YQ_TOOL ?= $(LOCALBIN)/yq
+
 # injection variables
 INJECTION_ROOT := github.com/kaito-project/grit/pkg/injections
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -37,13 +40,26 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 	test -s $(GOLANGCI_LINT) && $(GOLANGCI_LINT) --version | grep -q $(GOLANGCI_LINT_VERSION) || \
 	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
+.PHONY: install-yq
+install-yq: $(YQ_TOOL)
+$(YQ_TOOL): $(LOCALBIN)
+	@if ! command -v $(YQ_TOOL) &> /dev/null; then \
+		echo "Installing yq..."; \
+		test -s $(YQ_TOOL) || curl -k -L https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_$(shell go env GOOS)_$(shell go env GOARCH) -o $(YQ_TOOL); \
+		chmod +x $(YQ_TOOL); \
+	else \
+		echo "yq is already installed"; \
+	fi
+
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: controller-gen install-yq ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=charts/grit-manager/crds
 	$(CONTROLLER_GEN) rbac:roleName=grit-manager-clusterrole paths="./pkg/gritmanager/..." output:rbac:artifacts:config=charts/grit-manager/templates
 	$(CONTROLLER_GEN) webhook paths="./pkg/gritmanager/..." output:webhook:artifacts:config=charts/grit-manager/templates
 	mv charts/grit-manager/templates/role.yaml charts/grit-manager/templates/clusterrole-auto-generated.yaml
 	mv charts/grit-manager/templates/manifests.yaml charts/grit-manager/templates/webhooks-auto-generated.yaml
+	yq eval -i 'select(.kind=="MutatingWebhookConfiguration") .metadata.name = "grit-manager-mutating-webhook-configuration"' charts/grit-manager/templates/webhooks-auto-generated.yaml
+	yq eval -i 'select(.kind == "ValidatingWebhookConfiguration") .metadata.name = "grit-manager-validating-webhook-configuration"' charts/grit-manager/templates/webhooks-auto-generated.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -97,6 +113,7 @@ ARCH ?= amd64,arm64
 BUILDKIT_VERSION ?= v0.18.1
 
 GRIT_AGENT_IMG_NAME ?= grit-agent
+GRIT_MANAGER_IMG_NAME ?= grit-manager
 
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
@@ -114,6 +131,15 @@ docker-build-grit-agent: docker-buildx
 		--platform="linux/$(ARCH)" \
 		--pull \
 		--tag $(REGISTRY)/$(GRIT_AGENT_IMG_NAME):$(IMG_TAG) .
+
+.PHONY: docker-build-grit-manager
+docker-build-grit-manager: docker-buildx
+	docker buildx build \
+		--file ./docker/grit-manager/Dockerfile \
+		--output=$(OUTPUT_TYPE) \
+		--platform="linux/$(ARCH)" \
+		--pull \
+		--tag $(REGISTRY)/$(GRIT_MANAGER_IMG_NAME):$(IMG_TAG) .
 
 .PHONY: clean
 clean:

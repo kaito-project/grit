@@ -1,0 +1,23 @@
+replicaCount: 1
+certDuration: 87600h
+nameOverrider: ""
+
+image:
+  registry: kaito-project
+  repository: grit-manager
+  tag: ""
+  pullSecrets: []
+
+ports:
+  metrics: 10351
+  webhook: 10350
+  healthProbe: 10352
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 1024Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  

@@ -78,7 +78,6 @@ func Run(opts *options.GritManagerOptions) error {
 	//logging
 	logger := klog.FromContext(ctx)
 	log.SetLogger(logger)
-	klog.SetLogger(logger)
 
 	// metrics server options
 	metricsServerOpts := metricsserver.Options{
