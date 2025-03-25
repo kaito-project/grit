@@ -4,7 +4,7 @@
 package v1alpha1
 
 const (
-	GritAgentLabel          = "grit.dev/heler"
+	GritAgentLabel          = "grit.dev/helper"
 	GritAgentName           = "grit-agent"
 	CheckpointDataPathLabel = "grit.dev/checkpoint"
 	RestoreNameLabel        = "grit.dev/restore-name"

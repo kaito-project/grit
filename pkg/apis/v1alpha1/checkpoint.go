@@ -57,12 +57,13 @@ type CheckpointStatus struct {
 
 // Checkpoint is the Schema for the Checkpoints API
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:path=checkpoints,scope=Namespaced,categories=girt,shortName={cp,cps}
+// +kubebuilder:resource:path=checkpoints,scope=Namespaced,categories=girt,shortName={ckpt}
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Pod",type="string",JSONPath=".spec.podName",description="The pod will be checkpointed"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The phase of checkpoint action"
-// +kubebuilder:printcolumn:name="Storage",type="string",JSONPath=".status.checkpointedDataPath",description="Checkpointed data is stored here"
+// +kubebuilder:printcolumn:name="Node",type="string",JSONPath=".status.nodeName",description="The node where pod is located"
+// +kubebuilder:printcolumn:name="Storage",type="string",JSONPath=".status.dataPath",description="Checkpointed data is stored here"
 type Checkpoint struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

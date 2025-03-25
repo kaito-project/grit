@@ -1,0 +1,9 @@
+apiVersion: kaito.sh/v1alpha1
+kind: Checkpoint
+metadata:
+  name: checkpoint-demo
+  namespace: default
+spec:
+  podName: "falcon7b-tuning-6fhnm"
+  volumeClaim:
+    claimName: "checkpoint-pvc"

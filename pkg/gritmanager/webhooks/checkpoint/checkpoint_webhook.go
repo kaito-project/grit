@@ -57,6 +57,16 @@ func (w *CheckpointWebhook) ValidateCreate(ctx context.Context, obj runtime.Obje
 		return admission.Warnings{}, fmt.Errorf("node(%s) referenced by pod(%s) and checkpoint(%s) is not ready", node.Name, pod.Name, ckpt.Name)
 	}
 
+	//validate pvc
+	var pvc corev1.PersistentVolumeClaim
+	if err := w.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Spec.VolumeClaim.ClaimName}, &pvc); err != nil {
+		return admission.Warnings{}, err
+	}
+
+	if pvc.Status.Phase != corev1.ClaimBound {
+		return admission.Warnings{}, fmt.Errorf("pvc(%s) is not bound", ckpt.Spec.VolumeClaim.ClaimName)
+	}
+
 	return admission.Warnings{}, nil
 }
 
@@ -78,8 +88,9 @@ func isNodeReady(node *corev1.Node) bool {
 	return false
 }
 
-// +kubebuilder:webhook:path=/validate-kaito-sh-v1alpha1-checkpoint,mutating=false,failurePolicy=fail,sideEffects=None,admissionReviewVersions=v1,groups="kaito.sh",resources=checkpoints,verbs=create,versions=v1alpha1,name=validate.kaito.sh.v1alpha1.restore.grit
-// +kubebuilder:rbac:groups="",resources=nodes,verbs=get
+// +kubebuilder:webhook:path=/validate-kaito-sh-v1alpha1-checkpoint,mutating=false,failurePolicy=fail,sideEffects=None,admissionReviewVersions=v1,groups="kaito.sh",resources=checkpoints,verbs=create,versions=v1alpha1,name=validating.checkpoints.kaito.sh
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
 
 func (w *CheckpointWebhook) Register(_ context.Context, mgr manager.Manager) error {
 	return controllerruntime.NewWebhookManagedBy(mgr).

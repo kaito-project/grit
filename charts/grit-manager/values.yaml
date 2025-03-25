@@ -1,12 +1,20 @@
+log:
+  level: 5
+
 replicaCount: 1
 certDuration: 87600h
 nameOverrider: ""
 
 image:
-  registry: kaito-project
-  repository: grit-manager
-  tag: ""
-  pullSecrets: []
+  gritmanager:
+    registry: kaito.sh
+    repository: grit-manager
+    tag: 0.0.1
+    pullSecrets: []
+  gritagent:
+    registry: kaito.sh
+    repository: grit-agent
+    tag: 0.0.1
 
 ports:
   metrics: 10351

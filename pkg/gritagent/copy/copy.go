@@ -4,23 +4,26 @@
 package copy
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"go.uber.org/multierr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
 	DownloadSentinelFileName = "download-state"
 )
 
-func TransferData(srcDir, dstDir string) error {
+func TransferData(ctx context.Context, srcDir, dstDir string) error {
 	var wg sync.WaitGroup
 	errs := make([]error, 20)
 	workerChan := make(chan struct{}, 10)
 
+	log.FromContext(ctx).Info("start to transfer data", "src-dir", srcDir, "dst-dir", dstDir)
 	err := filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -48,6 +51,7 @@ func TransferData(srcDir, dstDir string) error {
 			if err := copyFile(src, dst); err != nil {
 				errs = append(errs, err)
 			}
+			log.FromContext(ctx).Info("copy file successfully", "src-file", src)
 		}(path, dstPath)
 
 		return nil
@@ -58,6 +62,7 @@ func TransferData(srcDir, dstDir string) error {
 	}
 
 	wg.Wait()
+	log.FromContext(ctx).Info("data transfer completed", "src-dir", srcDir, "dst-dir", dstDir)
 
 	return multierr.Combine(errs...)
 }

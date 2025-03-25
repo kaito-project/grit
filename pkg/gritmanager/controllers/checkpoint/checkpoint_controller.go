@@ -56,11 +56,12 @@ func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agen
 		agentManager: agentManager,
 	}
 
-	// v1alpha1.Checkpointing, v1alpha1.CheckpointFailed, v1alpha1.CheckpointMigrated,
+	// v1alpha1.CheckpointFailed, v1alpha1.CheckpointMigrated,
 	// these three states, girt-manager don't need to do anything.
 	c.statesMachine = map[v1alpha1.CheckpointPhase]CheckpointStateHandler{
 		v1alpha1.CheckpointNone:      c.initializingHandler,
 		v1alpha1.CheckpointPending:   c.pendingHandler,
+		v1alpha1.Checkpointing:       c.checkpointingHandler,
 		v1alpha1.Checkpointed:        c.checkpointedHandler,
 		v1alpha1.CheckpointMigrating: c.migratingHandler,
 	}
@@ -141,15 +142,13 @@ func (c *Controller) initializingHandler(ctx context.Context, ckpt *v1alpha1.Che
 }
 
 // pendingHandler is used for distributing grit agent pod to specified node which has the pod for checkpointing.
-// checkpoint state will be upgraded to Checkpointing after grit agent pod becomes running.
+// checkpoint state will be upgraded to Checkpointing after grit agent pod created.
 func (c *Controller) pendingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
 	// grit agent job is running, upgrade state to checkpointing when pod is ready
 	var job batchv1.Job
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Name}, &job); err == nil {
-		if job.Status.Ready != nil && *(job.Status.Ready) == 1 {
-			ckpt.Status.Phase = v1alpha1.Checkpointing
-			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is ready", job.Namespace, job.Name))
-		}
+		ckpt.Status.Phase = v1alpha1.Checkpointing
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is ready", job.Namespace, job.Name))
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -161,9 +160,64 @@ func (c *Controller) pendingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoi
 		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "GenerateGritAgentFailed", fmt.Sprintf("failed to generate grit agent job, %v", err))
 		return nil
 	}
+	log.FromContext(ctx).Info("grit manager job", "object", *gritAgentJob)
 
 	// start to distribute grit agent job
 	return c.Create(ctx, gritAgentJob)
+}
+
+func (c *Controller) checkpointingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
+	var gritAgentJob batchv1.Job
+	var isCompleted, isFailed bool
+	var err error
+	if err = c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Name}, &gritAgentJob); client.IgnoreNotFound(err) != nil {
+		return err
+	} else if err == nil {
+		isCompleted, isFailed = jobCompletedOrFailed(&gritAgentJob)
+		if isCompleted {
+			var pvc corev1.PersistentVolumeClaim
+			if err = c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Spec.VolumeClaim.ClaimName}, &pvc); err != nil {
+				return err
+			}
+
+			ckpt.Status.DataPath = fmt.Sprintf("%s:%s/%s", pvc.Spec.VolumeName, ckpt.Namespace, ckpt.Name)
+			ckpt.Status.Phase = v1alpha1.Checkpointed
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointed), "GritAgentJobCompleted", fmt.Sprintf("grit agent job(%s/%s) is completed", gritAgentJob.Namespace, gritAgentJob.Name))
+			return nil
+		}
+	}
+
+	// girt job is not found or failed
+	if err != nil || isFailed {
+		ckpt.Status.Phase = v1alpha1.CheckpointFailed
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "GritAgentJobFailed", fmt.Sprintf("failed to execute grit agent job(%s/%s) in checkpointing state", gritAgentJob.Namespace, gritAgentJob.Name))
+	}
+	return nil
+}
+
+func jobCompletedOrFailed(job *batchv1.Job) (bool, bool) {
+	if job == nil {
+		return false, false
+	}
+
+	if job.Status.Succeeded > 0 {
+		return true, false
+	}
+
+	if job.Status.Failed > 0 {
+		return false, true
+	}
+
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == batchv1.JobComplete && cond.Status == "True" {
+			return true, false
+		}
+
+		if cond.Type == batchv1.JobFailed && cond.Status == "True" {
+			return false, true
+		}
+	}
+	return false, false
 }
 
 // checkpointedHandler is used for garbage collecting grit agent pod. then pvc for cloud storage can be used for restoring.

@@ -80,8 +80,8 @@ func (w *RestoreWebhook) ValidateDelete(ctx context.Context, obj runtime.Object)
 	return admission.Warnings{}, nil
 }
 
-// +kubebuilder:webhook:path=/mutate-kaito-sh-v1alpha1-restore,mutating=true,failurePolicy=fail,sideEffects=None,admissionReviewVersions=v1,groups="kaito.sh",resources=restores,verbs=create,versions=v1alpha1,name=mutate.kaito.sh.v1alpha1.restore.grit
-// +kubebuilder:webhook:path=/validate-kaito-sh-v1alpha1-restore,mutating=false,failurePolicy=fail,sideEffects=None,admissionReviewVersions=v1,groups="kaito.sh",resources=restores,verbs=create,versions=v1alpha1,name=validate.kaito.sh.v1alpha1.restore.grit
+// +kubebuilder:webhook:path=/mutate-kaito-sh-v1alpha1-restore,mutating=true,failurePolicy=fail,sideEffects=None,admissionReviewVersions=v1,groups="kaito.sh",resources=restores,verbs=create,versions=v1alpha1,name=mutating.restores.kaito.sh
+// +kubebuilder:webhook:path=/validate-kaito-sh-v1alpha1-restore,mutating=false,failurePolicy=fail,sideEffects=None,admissionReviewVersions=v1,groups="kaito.sh",resources=restores,verbs=create,versions=v1alpha1,name=validating.restores.kaito.sh
 
 func (w *RestoreWebhook) Register(_ context.Context, mgr manager.Manager) error {
 	return controllerruntime.NewWebhookManagedBy(mgr).

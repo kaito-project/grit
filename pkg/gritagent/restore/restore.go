@@ -12,7 +12,7 @@ import (
 
 func RunRestore(ctx context.Context, opts *options.GritAgentOptions) error {
 	// download checkpointed data from cloud storage
-	if err := copy.TransferData(opts.SrcDir, opts.DstDir); err != nil {
+	if err := copy.TransferData(ctx, opts.SrcDir, opts.DstDir); err != nil {
 		return err
 	}
 

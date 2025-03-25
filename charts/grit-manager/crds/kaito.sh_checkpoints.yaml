@@ -14,8 +14,7 @@ spec:
     listKind: CheckpointList
     plural: checkpoints
     shortNames:
-    - cp
-    - cps
+    - ckpt
     singular: checkpoint
   scope: Namespaced
   versions:
@@ -28,8 +27,12 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
+    - description: The node where pod is located
+      jsonPath: .status.nodeName
+      name: Node
+      type: string
     - description: Checkpointed data is stored here
-      jsonPath: .status.checkpointedDataPath
+      jsonPath: .status.dataPath
       name: Storage
       type: string
     name: v1alpha1

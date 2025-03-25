@@ -234,7 +234,31 @@ func (c *Controller) updateWebhookConfigurations(ctx context.Context, caCert []b
 }
 
 func caCertChanged(old, new []byte) bool {
-	return base64.StdEncoding.EncodeToString(old) == base64.StdEncoding.EncodeToString(new)
+	return base64.StdEncoding.EncodeToString(old) != base64.StdEncoding.EncodeToString(new)
+}
+
+func (c *Controller) generateSecretPredicateFunc() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			secret, ok := e.Object.(*corev1.Secret)
+			if !ok {
+				return false
+			}
+
+			return secret.Namespace == c.workingNamespace && secret.Name == c.webhookServerSecretName
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			secret, ok := e.ObjectNew.(*corev1.Secret)
+			if !ok {
+				return false
+			}
+
+			return secret.Namespace == c.workingNamespace && secret.Name == c.webhookServerSecretName
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return false
+		},
+	}
 }
 
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=list;watch;get;update
@@ -244,7 +268,7 @@ func caCertChanged(old, new []byte) bool {
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("server.secret").
-		For(&corev1.Secret{}).
+		For(&corev1.Secret{}, builder.WithPredicates(c.generateSecretPredicateFunc())).
 		Watches(&admissionv1.ValidatingWebhookConfiguration{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{

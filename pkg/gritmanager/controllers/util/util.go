@@ -39,7 +39,7 @@ var (
 				return false
 			}
 
-			return GritAgentJobIsReady(job)
+			return IsGritAgentJob(job)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			job, ok := e.ObjectNew.(*batchv1.Job)
@@ -47,7 +47,7 @@ var (
 				return false
 			}
 
-			return GritAgentJobIsReady(job)
+			return IsGritAgentJob(job)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			job, ok := e.Object.(*batchv1.Job)
@@ -100,23 +100,19 @@ func IsGritAgentJob(job *batchv1.Job) bool {
 	return job.Labels[v1alpha1.GritAgentLabel] == v1alpha1.GritAgentName
 }
 
-func GritAgentJobIsReady(job *batchv1.Job) bool {
-	if !IsGritAgentJob(job) {
-		return false
-	}
-
-	if job.Status.Ready != nil && *(job.Status.Ready) == 1 {
-		return true
-	}
-
-	return false
-}
-
 func IsRestorationPod(pod *corev1.Pod) bool {
 	return len(pod.Labels[v1alpha1.CheckpointDataPathLabel]) != 0
 }
 
 func UpdateCondition(clk clock.Clock, conditions *[]metav1.Condition, status metav1.ConditionStatus, conditionType, reason, message string) {
+	if conditions == nil {
+		return
+	}
+
+	if *conditions == nil {
+		*conditions = []metav1.Condition{}
+	}
+
 	newCondition := metav1.Condition{
 		Type:               conditionType,
 		Status:             status,
@@ -143,7 +139,7 @@ func UpdateCondition(clk clock.Clock, conditions *[]metav1.Condition, status met
 
 func RemoveCondition(conditions *[]metav1.Condition, conditionType string) {
 	for i, cond := range *conditions {
-		if cond.Type != conditionType {
+		if cond.Type == conditionType {
 			(*conditions)[i] = (*conditions)[len(*conditions)-1]
 			*conditions = (*conditions)[:len(*conditions)-1]
 			return

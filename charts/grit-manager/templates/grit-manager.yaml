@@ -31,7 +31,7 @@ metadata:
   name: grit-manager-webhook-svc
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "girt-manager.labels" . | nindent 4 }}
+    {{- include "grit-manager.labels" . | nindent 4 }}
 spec:
   ports:
     - port: 443
@@ -73,8 +73,9 @@ spec:
           key: node-role.kubernetes.io/control-plane
       containers:
         - args:
-            - --metrics-port=:{{ .Values.ports.metrics }}
-            - --health-probe-port=:{{ .Values.ports.healthProbe }}
+            - --v={{ .Values.log.level }}
+            - --metrics-port={{ .Values.ports.metrics }}
+            - --health-probe-port={{ .Values.ports.healthProbe }}
             - --webhook-port={{ .Values.ports.webhook }}
             - --working-namespace={{ .Release.Namespace }}
             {{- if .Values.certDuration }}
@@ -82,7 +83,7 @@ spec:
             {{- end }}
           command:
             - /grit-manager
-          image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+          image: {{ .Values.image.gritmanager.registry }}/{{ .Values.image.gritmanager.repository }}:{{ .Values.image.gritmanager.tag | default .Chart.AppVersion }}
           imagePullPolicy: IfNotPresent
           name: grit-manager
           ports:

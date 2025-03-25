@@ -33,12 +33,14 @@ func NewGritAgentCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "grit-agent",
 		Version: injections.VersionInfo(),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cliflag.PrintFlags(cmd.Flags())
 
 			if err := Run(opts); err != nil {
 				fmt.Fprintf(os.Stderr, "run grit-agent failed: %v\n", err)
+				return err
 			}
+			return nil
 		},
 	}
 

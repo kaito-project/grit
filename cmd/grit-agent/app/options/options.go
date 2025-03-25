@@ -14,7 +14,6 @@ type GritAgentOptions struct {
 	KubeClientQPS   int
 	KubeClientBurst int
 	Action          string
-	CheckpointName  string
 	SrcDir          string
 	DstDir          string
 
@@ -46,9 +45,8 @@ func (o *GritAgentOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&o.KubeClientQPS, "kube-client-qps", o.KubeClientQPS, "the rate of qps to kube-apiserver.")
 	fs.IntVar(&o.KubeClientBurst, "kube-client-burst", o.KubeClientBurst, "the max allowed burst of queries to the kube-apiserver.")
 	fs.StringVar(&o.Action, "action", os.Getenv("ACTION"), "the action to be performed. Valid values are: 'checkpoint', 'restore'.")
-	fs.StringVar(&o.CheckpointName, "checkpoint-name", o.CheckpointName, "the name of checkpoint resource which is used for C/R.")
-	fs.StringVar(&o.SrcDir, "src-dir", o.SrcDir, "the source directory for C/R data.")
-	fs.StringVar(&o.DstDir, "dst-dir", o.DstDir, "the destination directory for C/R data.")
+	fs.StringVar(&o.SrcDir, "src-dir", o.SrcDir, "the source directory in agent container for C/R data.")
+	fs.StringVar(&o.DstDir, "dst-dir", o.DstDir, "the destination directory in agent container for C/R data.")
 
 	fs.StringVar(&o.TargetPodNamespace, "target-pod-namespace", os.Getenv("TARGET_NAMESPACE"), "the namespace of the target pod.")
 	fs.StringVar(&o.TargetPodName, "target-pod-name", os.Getenv("TARGET_NAME"), "the name of the target pod.")

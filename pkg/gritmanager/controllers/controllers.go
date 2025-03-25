@@ -15,6 +15,9 @@ import (
 	"github.com/kaito-project/grit/pkg/gritmanager/controllers/secret"
 )
 
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;patch;update
+
 func NewControllers(mgr manager.Manager, clock clock.Clock, opts *options.GritManagerOptions, agentManager *agentmanager.AgentManager) []controller.Controller {
 
 	return []controller.Controller{

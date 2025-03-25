@@ -5,24 +5,34 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   host-path: "/var/lib/grit-agent"
-  grit-agent.yaml: |
+  grit-agent-template.yaml: |
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: {{.jobName}}
-      namespace: {{.namespace}}
+      name: {{`{{`}} .jobName {{`}}`}}
+      namespace: {{`{{`}} .namespace {{`}}`}}
       labels:
         grit.dev/helper: grit-agent
     spec:
+      backoffLimit: 3
       template:
         spec:
           hostNetwork: true
-          restartPolicy: OnFailure
-          nodeName: {{.nodeName}}
+          restartPolicy: Never
+          volumes:
+          - name: containerd-sock
+            hostPath:
+              path: /run/containerd/containerd.sock
+              type: Socket
+          nodeName: {{`{{`}} .nodeName {{`}}`}}
           tolerations:
           - operator: "Exists"
           containers:
           - name: grit-agent
-            image: kaito.sh/grit-agent:latest
-            command: ["/usr/local/bin/grit-agent"]
+            image: {{ .Values.image.gritagent.registry }}/{{ .Values.image.gritagent.repository }}:{{ .Values.image.gritagent.tag | default .Chart.AppVersion }}
+            command: ["/grit-agent"]
+            args: ["--v=5"]
             imagePullPolicy: IfNotPresent
+            volumeMounts:
+            - name: containerd-sock
+              mountPath: /run/containerd/containerd.sock

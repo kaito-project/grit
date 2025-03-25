@@ -8,15 +8,23 @@ rules:
   - ""
   resources:
   - configmaps
+  - nodes
+  - persistentvolumeclaims
   verbs:
+  - get
   - list
   - watch
 - apiGroups:
   - ""
   resources:
-  - nodes
+  - events
   verbs:
+  - create
   - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -55,6 +63,15 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - patch
+  - update
 - apiGroups:
   - kaito.sh
   resources:

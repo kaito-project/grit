@@ -12,7 +12,7 @@ webhooks:
         namespace: system
         path: /mutate-core-v1-pod
     failurePolicy: Ignore
-    name: mutate.core.v1.pods.grit
+    name: mutating.pods.k8s.io
     rules:
       - apiGroups:
           - ""
@@ -31,7 +31,7 @@ webhooks:
         namespace: system
         path: /mutate-kaito-sh-v1alpha1-restore
     failurePolicy: Fail
-    name: mutate.kaito.sh.v1alpha1.restore.grit
+    name: mutating.restores.kaito.sh
     rules:
       - apiGroups:
           - kaito.sh
@@ -56,7 +56,7 @@ webhooks:
         namespace: system
         path: /validate-kaito-sh-v1alpha1-checkpoint
     failurePolicy: Fail
-    name: validate.kaito.sh.v1alpha1.restore.grit
+    name: validating.checkpoints.kaito.sh
     rules:
       - apiGroups:
           - kaito.sh
@@ -75,7 +75,7 @@ webhooks:
         namespace: system
         path: /validate-kaito-sh-v1alpha1-restore
     failurePolicy: Fail
-    name: validate.kaito.sh.v1alpha1.restore.grit
+    name: validating.restores.kaito.sh
     rules:
       - apiGroups:
           - kaito.sh
