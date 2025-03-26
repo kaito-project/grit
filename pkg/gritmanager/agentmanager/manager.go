@@ -136,7 +136,11 @@ func (m *AgentManager) GenerateGritAgentJob(ctx context.Context, ckpt *v1alpha1.
 		c.Args = append(c.Args, fmt.Sprintf("--%s=%s", k, v))
 	}
 
-	c.Env = append(c.Env, corev1.EnvVar{Name: "TARGET_NAMESPACE", Value: ckpt.Namespace}, corev1.EnvVar{Name: "TARGET_NAME", Value: ckpt.Spec.PodName})
+	c.Env = append(c.Env,
+		corev1.EnvVar{Name: "TARGET_NAMESPACE", Value: ckpt.Namespace},
+		corev1.EnvVar{Name: "TARGET_NAME", Value: ckpt.Spec.PodName},
+		corev1.EnvVar{Name: "TARGET_UID", Value: ckpt.Status.PodUID},
+	)
 	return gritAgentJob, nil
 }
 

@@ -169,15 +169,16 @@ func Run(opts *options.GritManagerOptions) error {
 
 	// initialize girt agent manager
 	agentManager := agentmanager.NewAgentManager(opts.WorkingNamespace, configmapLister)
+	clk := clock.RealClock{}
 
 	// initialize controllers
-	controllers := controllers.NewControllers(mgr, clock.RealClock{}, opts, agentManager)
+	controllers := controllers.NewControllers(mgr, clk, opts, agentManager)
 	for _, c := range controllers {
 		lo.Must0(c.Register(ctx, mgr))
 	}
 
 	// initialize webhooks
-	webhooks := webhooks.NewWebhooks(mgr, agentManager)
+	webhooks := webhooks.NewWebhooks(mgr, clk, agentManager)
 	for _, c := range webhooks {
 		lo.Must0(c.Register(ctx, mgr))
 	}

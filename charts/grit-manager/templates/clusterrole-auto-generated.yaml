@@ -95,4 +95,5 @@ rules:
   - create
   - get
   - list
+  - patch
   - watch

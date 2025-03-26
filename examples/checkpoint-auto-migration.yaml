@@ -4,6 +4,7 @@ metadata:
   name: checkpoint-demo
   namespace: default
 spec:
-  podName: "falcon7b-tuning-cgflx"
+  autoMigration: true
+  podName: "falcon7b-tuning-fsczs"
   volumeClaim:
     claimName: "checkpoint-pvc"

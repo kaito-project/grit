@@ -4,9 +4,15 @@
 package v1alpha1
 
 const (
-	GritAgentLabel          = "grit.dev/helper"
-	GritAgentName           = "grit-agent"
+	// label key and value for grit agent job
+	GritAgentLabel = "grit.dev/helper"
+	GritAgentName  = "grit-agent"
+
+	// annotations for restoration pod
 	CheckpointDataPathLabel = "grit.dev/checkpoint"
 	RestoreNameLabel        = "grit.dev/restore-name"
-	PodSpecHashLabel        = "grit.dev/pod-spec-hash"
+
+	// annotations for restore resource
+	PodSpecHashLabel            = "grit.dev/pod-spec-hash"
+	RestorationPodSelectedLabel = "grit.dev/pod-selected"
 )

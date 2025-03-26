@@ -158,13 +158,18 @@ spec:
                 description: checkpointed pod is located on this node
                 type: string
               phase:
-                description: 'state machine of Checkpoint Phase: Pending --> Checkpointing
-                  --> Checkpointed or Failed.'
+                description: 'state machine of Checkpoint Phase: Created -->Pending
+                  --> Checkpointing --> Checkpointed --> Migrating --> Migrated or
+                  Failed.'
                 type: string
               podSpecHash:
                 description: |-
                   PodSpecHash is used for recording hash value of pod spec.
                   Checkpointed data can be used to restore for pod with same hash value.
+                type: string
+              podUID:
+                description: PodUid is used for storing pod uid which will be used
+                  to construct log path of pod.
                 type: string
             type: object
         required:

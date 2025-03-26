@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,9 +21,10 @@ import (
 )
 
 const (
-	ServerKey  = "server-key.pem"
-	ServerCert = "server-cert.pem"
-	CACert     = "ce-cert.pem"
+	ServerKey               = "server-key.pem"
+	ServerCert              = "server-cert.pem"
+	CACert                  = "ce-cert.pem"
+	KubeAPIAccessNamePrefix = "kube-api-access-"
 )
 
 type controllerNameKeyType struct{}
@@ -90,9 +92,34 @@ func WithWebhookName(ctx context.Context, name string) context.Context {
 }
 
 func ComputeHash(spec *corev1.PodSpec) string {
+	// exclude fields which varied across nodes, like spec.NodeName, kube-api-access volume
+	specCopy := spec.DeepCopy()
+	specCopy.NodeName = ""
+	for i := range specCopy.Volumes {
+		if strings.HasPrefix(specCopy.Volumes[i].Name, KubeAPIAccessNamePrefix) {
+			specCopy.Volumes[i].Name = ""
+		}
+	}
+
+	for i := range specCopy.InitContainers {
+		for j := range specCopy.InitContainers[i].VolumeMounts {
+			if strings.HasPrefix(specCopy.InitContainers[i].VolumeMounts[j].Name, KubeAPIAccessNamePrefix) {
+				specCopy.InitContainers[i].VolumeMounts[j].Name = ""
+			}
+		}
+	}
+
+	for i := range specCopy.Containers {
+		for j := range specCopy.Containers[i].VolumeMounts {
+			if strings.HasPrefix(specCopy.Containers[i].VolumeMounts[j].Name, KubeAPIAccessNamePrefix) {
+				specCopy.Containers[i].VolumeMounts[j].Name = ""
+			}
+		}
+	}
+
 	hasher := fnv.New32a()
 	hasher.Reset()
-	fmt.Fprintf(hasher, "%v", dump.ForHash(spec))
+	fmt.Fprintf(hasher, "%v", dump.ForHash(specCopy))
 	return fmt.Sprint(hasher.Sum32())
 }
 
@@ -101,7 +128,7 @@ func IsGritAgentJob(job *batchv1.Job) bool {
 }
 
 func IsRestorationPod(pod *corev1.Pod) bool {
-	return len(pod.Labels[v1alpha1.CheckpointDataPathLabel]) != 0
+	return len(pod.Annotations[v1alpha1.CheckpointDataPathLabel]) != 0
 }
 
 func UpdateCondition(clk clock.Clock, conditions *[]metav1.Condition, status metav1.ConditionStatus, conditionType, reason, message string) {
@@ -145,4 +172,24 @@ func RemoveCondition(conditions *[]metav1.Condition, conditionType string) {
 			return
 		}
 	}
+}
+
+// ResolveLastPhaseFromConditions is used for getting the last phase before failed, so state machine can move out of failed state if
+// errors have been fixed.
+func ResolveLastPhaseFromConditions(conditions []metav1.Condition, conditionOrders map[string]int, firstPhase string) string {
+	phase := ""
+	// if phase is RestoreFailed, we need to resolve conditions and find the last phase before failed.
+	maxOrder := -1
+	for _, cond := range conditions {
+		if order, exists := conditionOrders[cond.Type]; exists && order > maxOrder {
+			maxOrder = order
+			phase = cond.Type
+		}
+	}
+
+	// if there is no conditions, we should fall back to beginning.
+	if phase == "" {
+		phase = firstPhase
+	}
+	return phase
 }

@@ -10,7 +10,7 @@ import (
 type RestorePhase string
 
 const (
-	RestoreNone    RestorePhase = "none"
+	RestoreCreated RestorePhase = "Created"
 	RestorePending RestorePhase = "Pending"
 	Restoring      RestorePhase = "Restoring"
 	Restored       RestorePhase = "Restored"

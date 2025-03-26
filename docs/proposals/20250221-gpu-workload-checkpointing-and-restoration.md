@@ -141,12 +141,13 @@ Moreover, if the `autoMigration` field is set in the Checkpoint CR, GRIT control
 type CheckpointPhase string
 
 const (
-  CheckpointPending      CheckpointPhase = "Pending"
-  Checkpointing          CheckpointPhase = "Checkpointing"
-  Checkpointed           CheckpointPhase = "Checkpointed"
-  CheckpointMigrating    CheckpointPhase = "Migrating"
-  CheckpointMigrated     CheckpointPhase = "Migrated"
-  CheckpointFailed       CheckpointPhase = "Failed"
+  CheckpointCreated   CheckpointPhase = "Created"
+  CheckpointPending   CheckpointPhase = "Pending"
+  Checkpointing       CheckpointPhase = "Checkpointing"
+  Checkpointed        CheckpointPhase = "Checkpointed"
+  CheckpointMigrating CheckpointPhase = "Migrating"
+  CheckpointMigrated  CheckpointPhase = "Migrated"
+  CheckpointFailed    CheckpointPhase = "Failed"
 )
 
 type CheckpointSpec struct {
@@ -168,6 +169,8 @@ type CheckpointStatus struct {
   // PodSpecHash is used for recording hash value of pod spec.
   // Checkpointed data can be used to restore for pod with same hash value.
   PodSpecHash string
+  // PodUid is used for storing pod uid which will be used to construct log path of pod.
+  PodUid string
   // state machine of Checkpoint Phase: Pending --> Checkpointing --> Checkpointed or Failed.
   Phase CheckpointPhase
   // current state of pod checkpoint
@@ -186,6 +189,7 @@ type Checkpoint struct {
 type RestorePhase string
 
 const (
+  RestoreCreated RestorePhase = "Created"
   RestorePending RestorePhase = "Pending"
   Restoring      RestorePhase = "Restoring"
   Restored       RestorePhase = "Restored"
@@ -232,14 +236,14 @@ type Restore struct {
 
 GRIT-Agent is responsible for packing checkpoint images and sync to cloud storage.
 
-Each GRIT-Agent share the same host working directory, which is used to store checkpoint data temporarily. The GRIT-Agent will create a subdirectory under the working directory for each checkpoint operation. The subdirectory will be named after the checkpoint CR name.
+Each GRIT-Agent share the same host working directory, which is used to store checkpoint data temporarily. The GRIT-Agent will create a subdirectory under the working directory for each checkpoint operation. The subdirectory will be named after the checkpoint CR namespace and name.
 
 ```shell
 /var/lib/grit-agent/
-├── <checkpoint-cr-name-1>/
-│   ├── checkpoint.tar.gz
-│   └── download-state
-├── <checkpoint-cr-name-2>/
+├── <namespace>/<checkpoint-cr-name-1>/
+│                ├── checkpoint.tar.gz
+│                └── download-state
+├── <namespace>/<checkpoint-cr-name-2>/
 ```
 
 ### GRIT-Runtime

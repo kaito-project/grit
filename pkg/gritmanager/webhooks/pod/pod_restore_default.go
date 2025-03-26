@@ -52,10 +52,10 @@ func (w *PodRestoreWebhook) Default(ctx context.Context, obj runtime.Object) err
 	}
 
 	restores := lo.Filter(restoreList.Items, func(restore v1alpha1.Restore, _ int) bool {
-		if restore.Status.Phase != v1alpha1.RestorePending {
+		if restore.Status.Phase != "" && restore.Status.Phase != v1alpha1.RestoreCreated {
 			return false
 		}
-		if len(restore.Status.TargetPod) != 0 {
+		if restore.Annotations[v1alpha1.RestorationPodSelectedLabel] == "true" {
 			return false
 		}
 
@@ -70,20 +70,22 @@ func (w *PodRestoreWebhook) Default(ctx context.Context, obj runtime.Object) err
 	var selectedRestore *v1alpha1.Restore
 	podSpecHash := util.ComputeHash(&pod.Spec)
 	for i := range restores {
-		if restores[i].Annotations[v1alpha1.PodSpecHashLabel] != podSpecHash {
-			continue
-		}
-
+		ownerRefIsMatch := false
 		for _, ownerRef := range pod.OwnerReferences {
 			if ownerRef.UID == restores[i].Spec.OwnerRef.UID &&
 				ownerRef.Kind == restores[i].Spec.OwnerRef.Kind &&
 				ownerRef.APIVersion == restores[i].Spec.OwnerRef.APIVersion {
-				selectedRestore = &restores[i]
+				ownerRefIsMatch = true
 				break
 			}
 		}
+		if !ownerRefIsMatch {
+			continue
+		}
 
-		if selectedRestore != nil {
+		log.FromContext(ctx).Info("select pod for restore(owner reference is equal)", "name", pod.Name, "spec", pod.Spec, "restore name", restores[i].Name, "old pod spec hash", restores[i].Annotations[v1alpha1.PodSpecHashLabel], "new pod spec hash", podSpecHash)
+		if restores[i].Annotations[v1alpha1.PodSpecHashLabel] == podSpecHash {
+			selectedRestore = &restores[i]
 			break
 		}
 	}
@@ -92,9 +94,14 @@ func (w *PodRestoreWebhook) Default(ctx context.Context, obj runtime.Object) err
 		return nil
 	}
 
-	selectedRestore.Status.TargetPod = pod.Name
-	if err := w.Status().Update(ctx, selectedRestore); err != nil {
-		log.FromContext(ctx).Error(err, "failed to update target pod for restore", "restore", selectedRestore.Name, "pod", pod.Name)
+	// there is a hack here for storing restoration pod name in restore:
+	// pod name maybe is empty in the pod create webhook, so we only mark
+	// restore annotation which specify a pod has already been selected by the restore.
+	// and restore.Status.TargetPod is configured in restore controller according to this mark.
+	patch := client.MergeFrom(selectedRestore.DeepCopy())
+	selectedRestore.Annotations[v1alpha1.RestorationPodSelectedLabel] = "true"
+	if err := w.Patch(ctx, selectedRestore, patch); err != nil {
+		log.FromContext(ctx).Error(err, "failed to patch target pod mark for restore", "restore", selectedRestore.Name, "pod", pod.Name)
 		return err
 	}
 
@@ -104,10 +111,13 @@ func (w *PodRestoreWebhook) Default(ctx context.Context, obj runtime.Object) err
 	}
 	pod.Annotations[v1alpha1.CheckpointDataPathLabel] = filepath.Join(w.agentManager.GetHostPath(), selectedRestore.Namespace, selectedRestore.Spec.CheckpointName)
 	pod.Annotations[v1alpha1.RestoreNameLabel] = selectedRestore.Name
+	log.FromContext(ctx).Info("selected pod for restore successfully", "namespace", pod.Namespace, "pod name", pod.Name, "restore name", selectedRestore.Name)
+
 	return nil
 }
 
 // +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,admissionReviewVersions=v1,groups="",resources=pods,verbs=create,versions=v1,name=mutating.pods.k8s.io
+// +kubebuilder:rbac:groups=kaito.sh,resources=restores,verbs=patch
 
 func (w *PodRestoreWebhook) Register(_ context.Context, mgr manager.Manager) error {
 	return controllerruntime.NewWebhookManagedBy(mgr).

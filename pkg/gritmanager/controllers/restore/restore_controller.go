@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/samber/lo"
 	"golang.org/x/time/rate"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,9 +34,10 @@ import (
 
 var (
 	restoreConditionOrder = map[string]int{
-		string(v1alpha1.RestorePending): 1,
-		string(v1alpha1.Restoring):      2,
-		string(v1alpha1.Restored):       3,
+		string(v1alpha1.RestoreCreated): 1,
+		string(v1alpha1.RestorePending): 2,
+		string(v1alpha1.Restoring):      3,
+		string(v1alpha1.Restored):       4,
 	}
 )
 
@@ -56,7 +58,7 @@ func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agen
 	}
 
 	c.statesMachine = map[v1alpha1.RestorePhase]RestoreStateHandler{
-		v1alpha1.RestoreNone:    c.initializingHandler,
+		v1alpha1.RestoreCreated: c.createdHandler,
 		v1alpha1.RestorePending: c.pendingHandler,
 		v1alpha1.Restoring:      c.restoringHandler,
 		v1alpha1.Restored:       c.restoredHandler,
@@ -69,7 +71,7 @@ func (c *Controller) Reconcile(ctx context.Context, restore *v1alpha1.Restore) (
 	ctx = util.WithControllerName(ctx, "restore.lifecycle")
 
 	updatedRestore := restore.DeepCopy()
-	phase := c.resolveLastPhase(updatedRestore)
+	phase := v1alpha1.RestorePhase(util.ResolveLastPhaseFromConditions(updatedRestore.Status.Conditions, restoreConditionOrder, string(v1alpha1.RestoreCreated)))
 	log.FromContext(ctx).Info("the last pahse of restore", "namespace", restore.Namespace, "restore", restore.Name, "phase", phase)
 	stateHandler, ok := c.statesMachine[phase]
 	if !ok {
@@ -91,44 +93,46 @@ func (c *Controller) Reconcile(ctx context.Context, restore *v1alpha1.Restore) (
 	return reconcile.Result{}, nil
 }
 
-// resolveLastPhase is used for getting the last phase before failed, so state machine can move out of failed state if
-// errors have been fixed.
-func (c *Controller) resolveLastPhase(restore *v1alpha1.Restore) v1alpha1.RestorePhase {
-	phase := restore.Status.Phase
-	if phase == "" {
-		phase = v1alpha1.RestoreNone
-		return phase
-	} else if phase != v1alpha1.RestoreFailed {
-		return phase
+// createdHandler is used for waiting to select the restoration pod, then upgraded state to RestorePending.
+func (c *Controller) createdHandler(ctx context.Context, restore *v1alpha1.Restore) error {
+	if restore.Status.Phase == "" {
+		restore.Status.Phase = v1alpha1.RestoreCreated
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestoreCreated), "RestoreIsCreated", "restore resource is created")
+		return nil
 	}
 
-	// if phase is RestoreFailed, we need to resolve conditions and find the last phase before failed.
-	maxOrder := -1
-	for _, cond := range restore.Status.Conditions {
-		if order, exists := restoreConditionOrder[cond.Type]; exists && order > maxOrder {
-			maxOrder = order
-			phase = v1alpha1.RestorePhase(cond.Type)
-		}
+	// waiting restoration pod is selected
+	if restore.Annotations[v1alpha1.RestorationPodSelectedLabel] != "true" {
+		return nil
 	}
 
-	// if there is no conditions, we should fall back to beginning.
-	if phase == v1alpha1.RestoreFailed {
-		phase = v1alpha1.RestoreNone
+	var podList corev1.PodList
+	if err := c.List(ctx, &podList, &client.ListOptions{Namespace: restore.Namespace}); err != nil {
+		return err
 	}
-	return phase
-}
 
-// initializingHandler is used for initializing restore resource, then upgraded state to RestorePending.
-func (c *Controller) initializingHandler(ctx context.Context, restore *v1alpha1.Restore) error {
+	pods := lo.Filter(podList.Items, func(pod corev1.Pod, _ int) bool {
+		return pod.Annotations[v1alpha1.RestoreNameLabel] == restore.Name
+	})
+
+	if len(pods) == 0 {
+		return fmt.Errorf("there is no pod for selected restore(%s), wait pod created", restore.Name)
+	} else if len(pods) > 1 {
+		restore.Status.Phase = v1alpha1.RestoreFailed
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestoreFailed), "MultiplePodsSelected", fmt.Sprintf("%d pods are selected as restoration pod for restore(%s)", len(pods), restore.Name))
+		return nil
+	}
+
+	restore.Status.TargetPod = pods[0].Name
 	restore.Status.Phase = v1alpha1.RestorePending
 	util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestorePending), "InitializingCompleted", "initialize restore state to pending")
 	return nil
 }
 
 // pendingHandler is used for distributing grit agent pod to specified node which has the pod for restoring.
-// restore state will be upgraded to restoring after grit agent pod becomes running.
+// restore state will be upgraded to restoring after grit agent pod created.
 func (c *Controller) pendingHandler(ctx context.Context, restore *v1alpha1.Restore) error {
-	// waiting restoration pod is selected
+	// Target pod is selected
 	if len(restore.Status.TargetPod) == 0 {
 		return nil
 	}
@@ -153,10 +157,8 @@ func (c *Controller) pendingHandler(ctx context.Context, restore *v1alpha1.Resto
 	// grit agent job is running, upgrade state to checkpointing when job is ready
 	var job batchv1.Job
 	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: restore.Name}, &job); err == nil {
-		if job.Status.Ready != nil && *(job.Status.Ready) == 1 {
-			restore.Status.Phase = v1alpha1.Restoring
-			util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Restoring), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is ready", job.Namespace, job.Name))
-		}
+		restore.Status.Phase = v1alpha1.Restoring
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Restoring), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is created", job.Namespace, job.Name))
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -211,7 +213,8 @@ func (c *Controller) restoredHandler(ctx context.Context, restore *v1alpha1.Rest
 	var gritAgentJob batchv1.Job
 	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: restore.Name}, &gritAgentJob); err == nil {
 		if gritAgentJob.DeletionTimestamp.IsZero() {
-			return c.Delete(ctx, &gritAgentJob)
+			deletePolicy := metav1.DeletePropagationForeground
+			return c.Delete(ctx, &gritAgentJob, &client.DeleteOptions{PropagationPolicy: &deletePolicy})
 		}
 	} else if client.IgnoreNotFound(err) != nil {
 		return err

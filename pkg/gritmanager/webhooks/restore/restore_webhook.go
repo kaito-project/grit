@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/clock"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -19,10 +20,14 @@ import (
 
 type RestoreWebhook struct {
 	client.Client
+	clk clock.Clock
 }
 
-func NewRestoreWebhook(client client.Client) *RestoreWebhook {
-	return &RestoreWebhook{Client: client}
+func NewRestoreWebhook(clk clock.Clock, client client.Client) *RestoreWebhook {
+	return &RestoreWebhook{
+		Client: client,
+		clk:    clk,
+	}
 }
 
 func (w *RestoreWebhook) Default(ctx context.Context, obj runtime.Object) error {
@@ -42,7 +47,6 @@ func (w *RestoreWebhook) Default(ctx context.Context, obj runtime.Object) error 
 	}
 
 	restore.Annotations[v1alpha1.PodSpecHashLabel] = ckpt.Status.PodSpecHash
-
 	return nil
 }
 

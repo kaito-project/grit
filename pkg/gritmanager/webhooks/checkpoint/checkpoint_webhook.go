@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/clock"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -20,10 +21,14 @@ import (
 
 type CheckpointWebhook struct {
 	client.Client
+	clk clock.Clock
 }
 
-func NewCheckpointWebhook(client client.Client) *CheckpointWebhook {
-	return &CheckpointWebhook{Client: client}
+func NewCheckpointWebhook(clk clock.Clock, client client.Client) *CheckpointWebhook {
+	return &CheckpointWebhook{
+		Client: client,
+		clk:    clk,
+	}
 }
 
 func (w *CheckpointWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (warnings admission.Warnings, err error) {

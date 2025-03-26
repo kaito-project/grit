@@ -32,11 +32,12 @@ import (
 
 var (
 	checkpointConditionOrder = map[string]int{
-		string(v1alpha1.CheckpointPending):   1,
-		string(v1alpha1.Checkpointing):       2,
-		string(v1alpha1.Checkpointed):        3,
-		string(v1alpha1.CheckpointMigrating): 4,
-		string(v1alpha1.CheckpointMigrated):  5,
+		string(v1alpha1.CheckpointCreated):   1,
+		string(v1alpha1.CheckpointPending):   2,
+		string(v1alpha1.Checkpointing):       3,
+		string(v1alpha1.Checkpointed):        4,
+		string(v1alpha1.CheckpointMigrating): 5,
+		string(v1alpha1.CheckpointMigrated):  6,
 	}
 )
 
@@ -57,9 +58,9 @@ func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agen
 	}
 
 	// v1alpha1.CheckpointFailed, v1alpha1.CheckpointMigrated,
-	// these three states, girt-manager don't need to do anything.
+	// these two states, girt-manager don't need to do anything.
 	c.statesMachine = map[v1alpha1.CheckpointPhase]CheckpointStateHandler{
-		v1alpha1.CheckpointNone:      c.initializingHandler,
+		v1alpha1.CheckpointCreated:   c.createdHandler,
 		v1alpha1.CheckpointPending:   c.pendingHandler,
 		v1alpha1.Checkpointing:       c.checkpointingHandler,
 		v1alpha1.Checkpointed:        c.checkpointedHandler,
@@ -73,7 +74,7 @@ func (c *Controller) Reconcile(ctx context.Context, ckpt *v1alpha1.Checkpoint) (
 	ctx = util.WithControllerName(ctx, "checkpoint.lifecycle")
 
 	updatedCkpt := ckpt.DeepCopy()
-	phase := c.resolveLastPhase(updatedCkpt)
+	phase := v1alpha1.CheckpointPhase(util.ResolveLastPhaseFromConditions(updatedCkpt.Status.Conditions, checkpointConditionOrder, string(v1alpha1.CheckpointCreated)))
 	log.FromContext(ctx).Info("the last pahse of checkpoint", "namespace", ckpt.Namespace, "checkpoint", ckpt.Name, "phase", phase)
 	stateHandler, ok := c.statesMachine[phase]
 	if !ok {
@@ -95,35 +96,13 @@ func (c *Controller) Reconcile(ctx context.Context, ckpt *v1alpha1.Checkpoint) (
 	return reconcile.Result{}, nil
 }
 
-// resolveLastPhase is used for getting the last phase before failed, so state machine can move out of failed state if
-// errors have been fixed.
-func (c *Controller) resolveLastPhase(ckpt *v1alpha1.Checkpoint) v1alpha1.CheckpointPhase {
-	phase := ckpt.Status.Phase
-	if phase == "" {
-		phase = v1alpha1.CheckpointNone
-		return phase
-	} else if phase != v1alpha1.CheckpointFailed {
-		return phase
+// createdHandler is used for initializing pod spec hash for checkpoint resource, then upgraded state to CheckpointPending.
+func (c *Controller) createdHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
+	if ckpt.Status.Phase == "" {
+		ckpt.Status.Phase = v1alpha1.CheckpointCreated
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointCreated), "CheckpointIsCreated", "checkpoint resource is created")
+		return nil
 	}
-
-	// if phase is CheckpointFailed, we need to resolve conditions and find the last phase before failed.
-	maxOrder := -1
-	for _, cond := range ckpt.Status.Conditions {
-		if order, exists := checkpointConditionOrder[cond.Type]; exists && order > maxOrder {
-			maxOrder = order
-			phase = v1alpha1.CheckpointPhase(cond.Type)
-		}
-	}
-
-	// if there is no conditions, we should fall back to the beginning.
-	if phase == v1alpha1.CheckpointFailed {
-		phase = v1alpha1.CheckpointNone
-	}
-	return phase
-}
-
-// initializingHandler is used for initializing pod spec hash for checkpoint resource, then upgraded state to CheckpointPending.
-func (c *Controller) initializingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
 	var pod corev1.Pod
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Spec.PodName}, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -136,6 +115,7 @@ func (c *Controller) initializingHandler(ctx context.Context, ckpt *v1alpha1.Che
 
 	ckpt.Status.NodeName = pod.Spec.NodeName
 	ckpt.Status.PodSpecHash = util.ComputeHash(&pod.Spec)
+	ckpt.Status.PodUID = string(pod.UID)
 	ckpt.Status.Phase = v1alpha1.CheckpointPending
 	util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointPending), "InitializingCompleted", "pod spec hash has been configured")
 	return nil
@@ -180,7 +160,7 @@ func (c *Controller) checkpointingHandler(ctx context.Context, ckpt *v1alpha1.Ch
 				return err
 			}
 
-			ckpt.Status.DataPath = fmt.Sprintf("%s:%s/%s", pvc.Spec.VolumeName, ckpt.Namespace, ckpt.Name)
+			ckpt.Status.DataPath = fmt.Sprintf("%s://%s/%s", pvc.Spec.VolumeName, ckpt.Namespace, ckpt.Name)
 			ckpt.Status.Phase = v1alpha1.Checkpointed
 			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointed), "GritAgentJobCompleted", fmt.Sprintf("grit agent job(%s/%s) is completed", gritAgentJob.Namespace, gritAgentJob.Name))
 			return nil
@@ -228,7 +208,8 @@ func (c *Controller) checkpointedHandler(ctx context.Context, ckpt *v1alpha1.Che
 		return err
 	} else if err == nil { // grit agent exist
 		if gritAgentJob.DeletionTimestamp.IsZero() { // skip deleting grit agent job
-			return c.Delete(ctx, &gritAgentJob)
+			deletePolicy := metav1.DeletePropagationForeground
+			return c.Delete(ctx, &gritAgentJob, &client.DeleteOptions{PropagationPolicy: &deletePolicy})
 		}
 	} else { // grit agent job is deleted
 		if ckpt.Spec.AutoMigration {
@@ -287,6 +268,7 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 		return err
 	}
 
+	log.FromContext(ctx).Info("checkpoint pod spec", "name", checkpointPod.Name, "spec", checkpointPod.Spec)
 	// delete checkpoint pod
 	if checkpointPod.DeletionTimestamp.IsZero() {
 		if err := c.Delete(ctx, &checkpointPod); client.IgnoreNotFound(err) != nil {

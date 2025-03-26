@@ -5,6 +5,7 @@ package webhooks
 
 import (
 	"github.com/awslabs/operatorpkg/controller"
+	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/kaito-project/grit/pkg/gritmanager/agentmanager"
@@ -13,11 +14,11 @@ import (
 	"github.com/kaito-project/grit/pkg/gritmanager/webhooks/restore"
 )
 
-func NewWebhooks(mgr manager.Manager, agentManager *agentmanager.AgentManager) []controller.Controller {
+func NewWebhooks(mgr manager.Manager, clk clock.Clock, agentManager *agentmanager.AgentManager) []controller.Controller {
 
 	return []controller.Controller{
 		pod.NewWebook(mgr.GetClient(), agentManager),
-		checkpoint.NewCheckpointWebhook(mgr.GetClient()),
-		restore.NewRestoreWebhook(mgr.GetClient()),
+		checkpoint.NewCheckpointWebhook(clk, mgr.GetClient()),
+		restore.NewRestoreWebhook(clk, mgr.GetClient()),
 	}
 }
