@@ -14,10 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const (
-	DownloadSentinelFileName = "download-state"
-)
-
 func TransferData(ctx context.Context, srcDir, dstDir string) error {
 	var wg sync.WaitGroup
 	errs := make([]error, 20)

@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: agent
-        image: qzhuang.azurecr.io/grit-agent:0.0.1
+        image: qzhuang.azurecr.io/grit-agent:debug
         imagePullPolicy: Always
         command:
         - /grit-agent
@@ -23,14 +23,18 @@ spec:
         - /mnt/grit-agent-work/
         env:
         - name: TARGET_NAMESPACE
-          value: "default"
+          value: "qzhuang"
         - name: TARGET_NAME
-          value: "falcon7b-tuning-2blk6"
+          value: "falcon7b-tuning-gmspd"
+        - name: TARGET_UID
+          value: "7678b551-754c-4152-85d6-498730f2fa09"
         volumeMounts:
         - name: checkpoint-volume
           mountPath: /mnt/grit-agent-work/
         - name: containerd-sock
           mountPath: /run/containerd/containerd.sock
+        - name: pod-logs
+          mountPath: /var/log/pods
       restartPolicy: Never
       hostNetwork: true
       volumes:
@@ -42,5 +46,9 @@ spec:
         hostPath:
           path: /run/containerd/containerd.sock
           type: Socket
-      # nodeSelector:
-      #   kubernetes.io/hostname: nvcr
+      - name: pod-logs
+        hostPath:
+          path: /var/log/pods
+          type: Directory
+      nodeSelector:
+        kubernetes.io/hostname: nvcr

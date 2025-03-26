@@ -24,6 +24,10 @@ data:
             hostPath:
               path: /run/containerd/containerd.sock
               type: Socket
+          - name: pod-logs
+            hostPath:
+              path: /var/log/pods
+              type: Directory
           nodeName: {{`{{`}} .nodeName {{`}}`}}
           tolerations:
           - operator: "Exists"
@@ -36,3 +40,5 @@ data:
             volumeMounts:
             - name: containerd-sock
               mountPath: /run/containerd/containerd.sock
+            - name: pod-logs
+              mountPath: /var/log/pods

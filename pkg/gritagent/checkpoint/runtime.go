@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"time"
 
 	crmetadata "github.com/checkpoint-restore/checkpointctl/lib"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
+	"github.com/kaito-project/grit/pkg/metadata"
 )
 
 func RuntimeCheckpointPod(ctx context.Context, opts *options.RuntimeCheckpointOptions) error {
@@ -89,6 +91,7 @@ func runtimeCheckpointContainer(ctx context.Context, ctrmeta *runtimeapi.Contain
 	// checkpoint to a temporary directory, then perform a rename to ensure atomicity
 	workPath := path.Join(opts.HostWorkPath, ctrmeta.GetMetadata().GetName()+"-work")
 	logger := log.FromContext(ctx).WithValues("container", ctrmeta.Id, "workPath", workPath)
+	ctx = log.IntoContext(ctx, logger)
 	// ensure the work path exists
 	if err := os.MkdirAll(workPath, 0755); err != nil {
 		return fmt.Errorf("failed to create work path %s: %w", workPath, err)
@@ -128,6 +131,15 @@ func runtimeCheckpointContainer(ctx context.Context, ctrmeta *runtimeapi.Contain
 	rootFsDiffTarPath := path.Join(workPath, crmetadata.RootFsDiffTar)
 	if err := writeRootFsDiffTar(ctx, ctrmeta, client, rootFsDiffTarPath); err != nil {
 		return fmt.Errorf("failed to write rootfs diff tar: %w", err)
+	}
+
+	// save logs
+	logger.Info("Checkpointing container", "step", "save container logs")
+	containerLogPath := path.Join(getPodLogPath(opts), ctrmeta.GetMetadata().GetName())
+	savePath := path.Join(workPath, metadata.ContainerLogFile)
+	if err := writeContainerLog(ctx, containerLogPath, savePath); err != nil {
+		// not a critical error, just log it
+		logger.Info("Failed to save container log", "error", err)
 	}
 
 	// TODO: add config.dump and spec.dump
@@ -208,5 +220,53 @@ func writeRootFsDiffTar(ctx context.Context, ctrmeta *runtimeapi.Container, clie
 	if err != nil {
 		return fmt.Errorf("failed to copy diff to file %s: %w", path, err)
 	}
+	return nil
+}
+
+func getPodLogPath(opts *options.RuntimeCheckpointOptions) string {
+	return path.Join(opts.KubeletLogPath, fmt.Sprintf("%s_%s_%s", opts.TargetPodNamespace, opts.TargetPodName, opts.TargetPodUID))
+}
+
+func writeContainerLog(ctx context.Context, logdir, savePath string) error {
+	files, err := os.ReadDir(logdir)
+	if err != nil {
+		return fmt.Errorf("failed to read log directory %s: %w", logdir, err)
+	}
+
+	var logFiles []string
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		if path.Ext(file.Name()) == ".log" {
+			logFiles = append(logFiles, file.Name())
+		}
+	}
+
+	if len(logFiles) == 0 {
+		log.FromContext(ctx).Info("No log files found, Skip")
+		return nil
+	}
+
+	sort.Strings(logFiles)
+
+	srcPath := path.Join(logdir, logFiles[len(logFiles)-1])
+	log.FromContext(ctx).Info("Save log", "file", srcPath)
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to open log file %s: %w", srcPath, err)
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(savePath)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file %s: %w", savePath, err)
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return fmt.Errorf("failed to copy log file to %s: %w", savePath, err)
+	}
+
 	return nil
 }

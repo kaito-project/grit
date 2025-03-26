@@ -8,6 +8,7 @@ import (
 
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
 	"github.com/kaito-project/grit/pkg/gritagent/copy"
+	"github.com/kaito-project/grit/pkg/metadata"
 )
 
 func RunRestore(ctx context.Context, opts *options.GritAgentOptions) error {
@@ -16,5 +17,5 @@ func RunRestore(ctx context.Context, opts *options.GritAgentOptions) error {
 		return err
 	}
 
-	return copy.CreateSentinelFile(opts.DstDir, copy.DownloadSentinelFileName)
+	return copy.CreateSentinelFile(opts.DstDir, metadata.DownloadSentinelFile)
 }

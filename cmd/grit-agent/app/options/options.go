@@ -23,7 +23,9 @@ type GritAgentOptions struct {
 type RuntimeCheckpointOptions struct {
 	TargetPodNamespace string
 	TargetPodName      string
+	TargetPodUID       string
 	RuntimeEndpoint    string
+	KubeletLogPath     string
 	HostWorkPath       string
 }
 
@@ -50,6 +52,8 @@ func (o *GritAgentOptions) AddFlags(fs *pflag.FlagSet) {
 
 	fs.StringVar(&o.TargetPodNamespace, "target-pod-namespace", os.Getenv("TARGET_NAMESPACE"), "the namespace of the target pod.")
 	fs.StringVar(&o.TargetPodName, "target-pod-name", os.Getenv("TARGET_NAME"), "the name of the target pod.")
+	fs.StringVar(&o.TargetPodUID, "target-pod-uid", os.Getenv("TARGET_UID"), "the UID of the target pod.")
 	fs.StringVar(&o.RuntimeEndpoint, "runtime-endpoint", "/run/containerd/containerd.sock", "the endpoint of the container runtime.")
+	fs.StringVar(&o.KubeletLogPath, "kubelet-log-path", "/var/log/pods", "the path of kubelet log.")
 	fs.StringVar(&o.HostWorkPath, "host-work-path", o.HostWorkPath, "the work path on the host.")
 }
