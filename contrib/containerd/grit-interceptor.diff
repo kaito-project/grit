@@ -1,0 +1,199 @@
+From 7b0108184e2044fba657a257468e3b3341d5e664 Mon Sep 17 00:00:00 2001
+From: jerryzhuang <zhuangqhc@gmail.com>
+Date: Thu, 27 Mar 2025 16:33:27 +1100
+Subject: [PATCH] feat: add container interceptor patch
+
+It will interceptor two CRI API.
+- CreateContainer: resume container log
+- PullImage: busy waiting for checkpoint image to be downloaded
+
+Signed-off-by: jerryzhuang <zhuangqhc@gmail.com>
+---
+ internal/cri/server/container_create.go      |  6 +++
+ internal/cri/server/grit/annotation.go       |  8 +++
+ internal/cri/server/grit/container_create.go | 54 ++++++++++++++++++++
+ internal/cri/server/grit/image_pull.go       | 47 +++++++++++++++++
+ internal/cri/server/images/image_pull.go     |  6 +++
+ 5 files changed, 121 insertions(+)
+ create mode 100644 internal/cri/server/grit/annotation.go
+ create mode 100644 internal/cri/server/grit/container_create.go
+ create mode 100644 internal/cri/server/grit/image_pull.go
+
+diff --git a/internal/cri/server/container_create.go b/internal/cri/server/container_create.go
+index ee5c78a55..1476b255f 100644
+--- a/internal/cri/server/container_create.go
++++ b/internal/cri/server/container_create.go
+@@ -41,6 +41,7 @@ import (
+ 	cio "github.com/containerd/containerd/v2/internal/cri/io"
+ 	crilabels "github.com/containerd/containerd/v2/internal/cri/labels"
+ 	customopts "github.com/containerd/containerd/v2/internal/cri/opts"
++	"github.com/containerd/containerd/v2/internal/cri/server/grit"
+ 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
+ 	"github.com/containerd/containerd/v2/internal/cri/util"
+ 	"github.com/containerd/containerd/v2/pkg/blockio"
+@@ -261,6 +262,11 @@ func (c *criService) CreateContainer(ctx context.Context, r *runtime.CreateConta
+ 	// Validate log paths and compose full container log path.
+ 	if sandboxConfig.GetLogDirectory() != "" && config.GetLogPath() != "" {
+ 		meta.LogPath = filepath.Join(sandboxConfig.GetLogDirectory(), config.GetLogPath())
++
++		if err = grit.InterceptCreateContainer(ctx, r); err != nil {
++			log.G(ctx).Errorf("failed to intercept create container: %v", err)
++		}
++
+ 		log.G(ctx).Debugf("Composed container full log path %q using sandbox log dir %q and container log path %q",
+ 			meta.LogPath, sandboxConfig.GetLogDirectory(), config.GetLogPath())
+ 	} else {
+diff --git a/internal/cri/server/grit/annotation.go b/internal/cri/server/grit/annotation.go
+new file mode 100644
+index 000000000..f43b25628
+--- /dev/null
++++ b/internal/cri/server/grit/annotation.go
+@@ -0,0 +1,8 @@
++package grit
++
++const (
++	AnnotationGritCheckpoint = "grit.dev/checkpoint"
++
++	CheckpointFileContainerLog = "container.log"
++	CheckpointFileSentinelFile = "download-state"
++)
+diff --git a/internal/cri/server/grit/container_create.go b/internal/cri/server/grit/container_create.go
+new file mode 100644
+index 000000000..7a5aadbc4
+--- /dev/null
++++ b/internal/cri/server/grit/container_create.go
+@@ -0,0 +1,54 @@
++package grit
++
++import (
++	"context"
++	"fmt"
++	"io"
++	"os"
++	"path"
++	"path/filepath"
++
++	"github.com/containerd/log"
++	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
++)
++
++// InterceptCreateContainer will try to resume the container log from the checkpoint image.
++func InterceptCreateContainer(ctx context.Context, r *runtime.CreateContainerRequest) error {
++	sandboxConfig := r.GetSandboxConfig()
++	checkpointPath, ok := r.GetSandboxConfig().GetAnnotations()[AnnotationGritCheckpoint]
++	if !ok {
++		return nil
++	}
++
++	var logPath string
++	config := r.GetConfig()
++	if sandboxConfig.GetLogDirectory() != "" && config.GetLogPath() != "" {
++		logPath = filepath.Join(sandboxConfig.GetLogDirectory(), config.GetLogPath())
++	} else {
++		return nil
++	}
++
++	savedLogPath := path.Join(checkpointPath, config.GetMetadata().GetName(), CheckpointFileContainerLog)
++	if _, err := os.Stat(savedLogPath); err == nil {
++		log.G(ctx).Infof("Resume container %q log from %q", config.GetMetadata().GetName(), savedLogPath)
++		srcFile, err := os.Open(savedLogPath)
++		if err != nil {
++			return fmt.Errorf("failed to open source log file %q: %w", savedLogPath, err)
++		}
++		defer srcFile.Close()
++
++		destFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640)
++		if err != nil {
++			return fmt.Errorf("failed to open destination log file %q: %w", logPath, err)
++		}
++		defer destFile.Close()
++
++		if _, err := io.Copy(destFile, srcFile); err != nil {
++			return fmt.Errorf("failed to copy log file from %q to %q: %w", savedLogPath, logPath, err)
++		}
++	} else {
++		log.G(ctx).Warnf("Saved log file %q does not exist, skipping log resume", savedLogPath)
++	}
++
++	return nil
++}
+diff --git a/internal/cri/server/grit/image_pull.go b/internal/cri/server/grit/image_pull.go
+new file mode 100644
+index 000000000..2b356b447
+--- /dev/null
++++ b/internal/cri/server/grit/image_pull.go
+@@ -0,0 +1,47 @@
++package grit
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"path"
++	"time"
++
++	"github.com/containerd/log"
++	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
++)
++
++// InterceptPullImage will polling wait for the checkpoint image to be downloaded.
++func InterceptPullImage(ctx context.Context, r *runtime.PullImageRequest) error {
++	checkpointPath, ok := r.GetSandboxConfig().GetAnnotations()[AnnotationGritCheckpoint]
++	if !ok {
++		return nil
++	}
++
++	sentileFile := path.Join(checkpointPath, CheckpointFileSentinelFile)
++	log.G(ctx).Infof("Found restoration mode, waiting for download to complete. sentileFile: %s", sentileFile)
++	// Polling wait for the file to come up
++	ticker := time.NewTicker(1 * time.Second)
++	defer ticker.Stop()
++
++	var timeout <-chan time.Time
++	if deadline, ok := ctx.Deadline(); ok {
++		timeout = time.After(time.Until(deadline))
++	} else {
++		timeout = time.After(10 * time.Minute)
++	}
++
++	for {
++		select {
++		case <-ticker.C:
++			if _, err := os.Stat(sentileFile); err == nil {
++				log.G(ctx).Infof("File %s is ready", sentileFile)
++				return nil
++			}
++		case <-timeout:
++			return fmt.Errorf("timed out waiting for file %s", sentileFile)
++		case <-ctx.Done():
++			return fmt.Errorf("context canceled while waiting for file %s: %w", sentileFile, ctx.Err())
++		}
++	}
++}
+diff --git a/internal/cri/server/images/image_pull.go b/internal/cri/server/images/image_pull.go
+index 408d4fa1d..8a7cbfcfb 100644
+--- a/internal/cri/server/images/image_pull.go
++++ b/internal/cri/server/images/image_pull.go
+@@ -47,6 +47,7 @@ import (
+ 	"github.com/containerd/containerd/v2/internal/cri/annotations"
+ 	criconfig "github.com/containerd/containerd/v2/internal/cri/config"
+ 	crilabels "github.com/containerd/containerd/v2/internal/cri/labels"
++	"github.com/containerd/containerd/v2/internal/cri/server/grit"
+ 	"github.com/containerd/containerd/v2/internal/cri/util"
+ 	snpkg "github.com/containerd/containerd/v2/pkg/snapshotters"
+ 	"github.com/containerd/containerd/v2/pkg/tracing"
+@@ -113,6 +114,11 @@ func (c *GRPCCRIImageService) PullImage(ctx context.Context, r *runtime.PullImag
+ 	if err != nil {
+ 		return nil, err
+ 	}
++
++	if err = grit.InterceptPullImage(ctx, r); err != nil {
++		return nil, err
++	}
++
+ 	return &runtime.PullImageResponse{ImageRef: ref}, nil
+ }
+ 
+-- 
+2.34.1
+
