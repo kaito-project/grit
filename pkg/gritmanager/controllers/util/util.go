@@ -12,10 +12,14 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/dump"
 	"k8s.io/utils/clock"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
 )
@@ -24,6 +28,7 @@ const (
 	ServerKey               = "server-key.pem"
 	ServerCert              = "server-cert.pem"
 	CACert                  = "ce-cert.pem"
+	GritAgentJobNamePrefix  = "grit-agent-"
 	KubeAPIAccessNamePrefix = "kube-api-access-"
 )
 
@@ -81,7 +86,41 @@ var (
 			return false
 		},
 	}
+
+	GritAgentJobHandler = handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		job, ok := obj.(*batchv1.Job)
+		if !ok {
+			return []reconcile.Request{}
+		}
+
+		if strings.HasPrefix(job.Name, GritAgentJobNamePrefix) {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{Namespace: job.Namespace, Name: GritAgentJobOwnerName(job)},
+				},
+			}
+		}
+		return []reconcile.Request{}
+	})
 )
+
+func GritAgentJobName(ckpt *v1alpha1.Checkpoint, restore *v1alpha1.Restore) string {
+	if ckpt != nil {
+		return fmt.Sprintf("%s%s", GritAgentJobNamePrefix, ckpt.Name)
+	} else if restore != nil {
+		return fmt.Sprintf("%s%s", GritAgentJobNamePrefix, restore.Name)
+	}
+	return ""
+}
+
+func GritAgentJobOwnerName(job *batchv1.Job) string {
+	if job != nil {
+		if strings.HasPrefix(job.Name, GritAgentJobNamePrefix) {
+			return strings.TrimPrefix(job.Name, GritAgentJobNamePrefix)
+		}
+	}
+	return ""
+}
 
 func WithControllerName(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, controllerNameKey, name)

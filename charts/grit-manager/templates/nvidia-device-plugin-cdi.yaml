@@ -38,6 +38,7 @@ spec:
           value: "gpu"
           effect: "NoSchedule"
       priorityClassName: "system-node-critical"
+      hostNetwork: true
       containers:
         - image: mcr.microsoft.com/oss/v2/nvidia/k8s-device-plugin:v0.17.0
           imagePullPolicy: IfNotPresent

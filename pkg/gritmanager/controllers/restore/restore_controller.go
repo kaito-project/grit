@@ -125,7 +125,7 @@ func (c *Controller) createdHandler(ctx context.Context, restore *v1alpha1.Resto
 
 	restore.Status.TargetPod = pods[0].Name
 	restore.Status.Phase = v1alpha1.RestorePending
-	util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestorePending), "InitializingCompleted", "initialize restore state to pending")
+	util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestorePending), "RestorationPodSelected", fmt.Sprintf("pod(%s) is selected as a restoration pod", pods[0].Name))
 	return nil
 }
 
@@ -156,9 +156,9 @@ func (c *Controller) pendingHandler(ctx context.Context, restore *v1alpha1.Resto
 
 	// grit agent job is running, upgrade state to checkpointing when job is ready
 	var job batchv1.Job
-	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: restore.Name}, &job); err == nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: util.GritAgentJobName(nil, restore)}, &job); err == nil {
 		restore.Status.Phase = v1alpha1.Restoring
-		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Restoring), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is created", job.Namespace, job.Name))
+		util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Restoring), "GritAgentIsCreated", fmt.Sprintf("grit agent job(%s/%s) for restore is created", job.Namespace, job.Name))
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -211,7 +211,7 @@ func (c *Controller) restoringHandler(ctx context.Context, restore *v1alpha1.Res
 // restoredHandler is used for garbage collecting grit agent pod which used for restoring pod.
 func (c *Controller) restoredHandler(ctx context.Context, restore *v1alpha1.Restore) error {
 	var gritAgentJob batchv1.Job
-	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: restore.Name}, &gritAgentJob); err == nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: restore.Namespace, Name: util.GritAgentJobName(nil, restore)}, &gritAgentJob); err == nil {
 		if gritAgentJob.DeletionTimestamp.IsZero() {
 			deletePolicy := metav1.DeletePropagationForeground
 			return c.Delete(ctx, &gritAgentJob, &client.DeleteOptions{PropagationPolicy: &deletePolicy})
@@ -234,14 +234,14 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("restore.lifecycle").
 		For(&v1alpha1.Restore{}).
-		Watches(&batchv1.Job{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(util.GritAgentJobPredicate)).
+		Watches(&batchv1.Job{}, util.GritAgentJobHandler, builder.WithPredicates(util.GritAgentJobPredicate)).
 		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 			pod, ok := obj.(*corev1.Pod)
 			if !ok {
 				return []reconcile.Request{}
 			}
 
-			if restoreName, ok := pod.Labels[v1alpha1.RestoreNameLabel]; ok {
+			if restoreName, ok := pod.Annotations[v1alpha1.RestoreNameLabel]; ok {
 				return []reconcile.Request{
 					{
 						NamespacedName: types.NamespacedName{Namespace: pod.Namespace, Name: restoreName},

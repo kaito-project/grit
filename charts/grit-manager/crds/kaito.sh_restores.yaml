@@ -24,8 +24,12 @@ spec:
       name: Checkpoint
       type: string
     - description: The pod will be restored
-      jsonPath: .status.restorationPod
+      jsonPath: .status.targetPod
       name: RestorationPod
+      type: string
+    - description: The node where restoration pod located on
+      jsonPath: .status.nodeName
+      name: NodeName
       type: string
     - description: The phase of restore action
       jsonPath: .status.phase

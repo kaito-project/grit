@@ -4,7 +4,7 @@ metadata:
   name: grit-agent-config
   namespace: {{ .Release.Namespace }}
 data:
-  host-path: "/var/lib/grit-agent"
+  host-path: "/mnt/grit-agent"
   grit-agent-template.yaml: |
     apiVersion: batch/v1
     kind: Job

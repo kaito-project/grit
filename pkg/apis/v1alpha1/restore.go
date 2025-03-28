@@ -57,7 +57,8 @@ type RestoreStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Checkpoint",type="string",JSONPath=".spec.checkpointName",description="The data of the checkpoint will be used for restoring"
-// +kubebuilder:printcolumn:name="RestorationPod",type="string",JSONPath=".status.restorationPod",description="The pod will be restored"
+// +kubebuilder:printcolumn:name="RestorationPod",type="string",JSONPath=".status.targetPod",description="The pod will be restored"
+// +kubebuilder:printcolumn:name="NodeName",type="string",JSONPath=".status.nodeName",description="The node where restoration pod located on"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The phase of restore action"
 type Restore struct {
 	metav1.TypeMeta   `json:",inline"`

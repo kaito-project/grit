@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -112,6 +111,7 @@ func (c *Controller) createdHandler(ctx context.Context, ckpt *v1alpha1.Checkpoi
 		}
 		return err
 	}
+	log.FromContext(ctx).Info("pod metadata", "metadata", pod.ObjectMeta, "checkpoint", ckpt.Name)
 
 	ckpt.Status.NodeName = pod.Spec.NodeName
 	ckpt.Status.PodSpecHash = util.ComputeHash(&pod.Spec)
@@ -126,9 +126,9 @@ func (c *Controller) createdHandler(ctx context.Context, ckpt *v1alpha1.Checkpoi
 func (c *Controller) pendingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
 	// grit agent job is running, upgrade state to checkpointing when pod is ready
 	var job batchv1.Job
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Name}, &job); err == nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: util.GritAgentJobName(ckpt, nil)}, &job); err == nil {
 		ckpt.Status.Phase = v1alpha1.Checkpointing
-		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent pod(%s/%s) is ready", job.Namespace, job.Name))
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent job(%s/%s) for checkpoint is created", job.Namespace, job.Name))
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -150,7 +150,7 @@ func (c *Controller) checkpointingHandler(ctx context.Context, ckpt *v1alpha1.Ch
 	var gritAgentJob batchv1.Job
 	var isCompleted, isFailed bool
 	var err error
-	if err = c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Name}, &gritAgentJob); client.IgnoreNotFound(err) != nil {
+	if err = c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: util.GritAgentJobName(ckpt, nil)}, &gritAgentJob); client.IgnoreNotFound(err) != nil {
 		return err
 	} else if err == nil {
 		isCompleted, isFailed = jobCompletedOrFailed(&gritAgentJob)
@@ -204,7 +204,7 @@ func jobCompletedOrFailed(job *batchv1.Job) (bool, bool) {
 // if checkpoint.Spec.AutoMigration is true, upgrade phase to checkpoint migrating.
 func (c *Controller) checkpointedHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
 	var gritAgentJob batchv1.Job
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Name}, &gritAgentJob); client.IgnoreNotFound(err) != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: util.GritAgentJobName(ckpt, nil)}, &gritAgentJob); client.IgnoreNotFound(err) != nil {
 		return err
 	} else if err == nil { // grit agent exist
 		if gritAgentJob.DeletionTimestamp.IsZero() { // skip deleting grit agent job
@@ -252,7 +252,7 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 
 	restore := v1alpha1.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "auto-" + ckpt.Name,
+			Name:      ckpt.Name,
 			Namespace: ckpt.Namespace,
 			Annotations: map[string]string{
 				v1alpha1.PodSpecHashLabel: ckpt.Status.PodSpecHash,
@@ -291,7 +291,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("checkpoint.lifecycle").
 		For(&v1alpha1.Checkpoint{}).
-		Watches(&batchv1.Job{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(util.GritAgentJobPredicate)).
+		Watches(&batchv1.Job{}, util.GritAgentJobHandler, builder.WithPredicates(util.GritAgentJobPredicate)).
 		WithOptions(controller.Options{
 			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
 				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, 300*time.Second),

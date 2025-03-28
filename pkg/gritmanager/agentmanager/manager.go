@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
+	"github.com/kaito-project/grit/pkg/gritmanager/controllers/util"
 )
 
 const (
@@ -64,12 +65,12 @@ func (m *AgentManager) GenerateGritAgentJob(ctx context.Context, ckpt *v1alpha1.
 	girtAgentJobTemplate := cm.Data[GritAgentYamlKey]
 	templateCtx := map[string]string{
 		"namespace": ckpt.Namespace,
-		"jobName":   ckpt.Name,
+		"jobName":   util.GritAgentJobName(ckpt, nil),
 		"nodeName":  ckpt.Status.NodeName,
 	}
 
 	if restore != nil {
-		templateCtx["jobName"] = restore.Name
+		templateCtx["jobName"] = util.GritAgentJobName(nil, restore)
 		templateCtx["nodeName"] = restore.Status.NodeName
 	}
 
