@@ -11,13 +11,13 @@ import (
 type CheckpointPhase string
 
 const (
-	CheckpointCreated   CheckpointPhase = "Created"
-	CheckpointPending   CheckpointPhase = "Pending"
-	Checkpointing       CheckpointPhase = "Checkpointing"
-	Checkpointed        CheckpointPhase = "Checkpointed"
-	CheckpointMigrating CheckpointPhase = "Migrating"
-	CheckpointMigrated  CheckpointPhase = "Migrated"
-	CheckpointFailed    CheckpointPhase = "Failed"
+	CheckpointCreated       CheckpointPhase = "Created"
+	CheckpointPending       CheckpointPhase = "Pending"
+	Checkpointing           CheckpointPhase = "Checkpointing"
+	Checkpointed            CheckpointPhase = "Checkpointed"
+	AutoMigrationSubmitting CheckpointPhase = "Submitting"
+	AutoMigrationSubmitted  CheckpointPhase = "Submitted"
+	CheckpointFailed        CheckpointPhase = "Failed"
 )
 
 type CheckpointSpec struct {
@@ -47,7 +47,7 @@ type CheckpointStatus struct {
 	// PodUid is used for storing pod uid which will be used to construct log path of pod.
 	// +optional
 	PodUID string `json:"podUID,omitempty"`
-	// state machine of Checkpoint Phase: Created -->Pending --> Checkpointing --> Checkpointed --> Migrating --> Migrated or Failed.
+	// state machine of Checkpoint Phase: Created -->Pending --> Checkpointing --> Checkpointed --> Submitting --> Submitted or Failed.
 	// +optional
 	Phase CheckpointPhase `json:"phase,omitempty"`
 	// current state of pod checkpoint

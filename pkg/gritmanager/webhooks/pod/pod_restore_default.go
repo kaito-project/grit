@@ -34,7 +34,7 @@ func NewWebook(client client.Client, agentManager *agentmanager.AgentManager) *P
 }
 
 func (w *PodRestoreWebhook) Default(ctx context.Context, obj runtime.Object) error {
-	ctx = util.WithWebhookName(ctx, "pod.restore")
+	ctx = util.WithWebhookName(ctx, "pod.create")
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return fmt.Errorf("expected a Pod object but got a different type")

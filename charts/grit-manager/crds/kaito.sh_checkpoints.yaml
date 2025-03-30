@@ -159,8 +159,8 @@ spec:
                 type: string
               phase:
                 description: 'state machine of Checkpoint Phase: Created -->Pending
-                  --> Checkpointing --> Checkpointed --> Migrating --> Migrated or
-                  Failed.'
+                  --> Checkpointing --> Checkpointed --> Submitting --> Submitted
+                  or Failed.'
                 type: string
               podSpecHash:
                 description: |-

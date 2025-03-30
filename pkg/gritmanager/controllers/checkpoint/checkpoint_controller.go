@@ -31,12 +31,12 @@ import (
 
 var (
 	checkpointConditionOrder = map[string]int{
-		string(v1alpha1.CheckpointCreated):   1,
-		string(v1alpha1.CheckpointPending):   2,
-		string(v1alpha1.Checkpointing):       3,
-		string(v1alpha1.Checkpointed):        4,
-		string(v1alpha1.CheckpointMigrating): 5,
-		string(v1alpha1.CheckpointMigrated):  6,
+		string(v1alpha1.CheckpointCreated):       1,
+		string(v1alpha1.CheckpointPending):       2,
+		string(v1alpha1.Checkpointing):           3,
+		string(v1alpha1.Checkpointed):            4,
+		string(v1alpha1.AutoMigrationSubmitting): 5,
+		string(v1alpha1.AutoMigrationSubmitted):  6,
 	}
 )
 
@@ -56,14 +56,14 @@ func NewController(clk clock.Clock, kubeClient client.Client, agentManager *agen
 		agentManager: agentManager,
 	}
 
-	// v1alpha1.CheckpointFailed, v1alpha1.CheckpointMigrated,
+	// v1alpha1.CheckpointFailed, v1alpha1.AutoMigrationSubmitted,
 	// these two states, girt-manager don't need to do anything.
 	c.statesMachine = map[v1alpha1.CheckpointPhase]CheckpointStateHandler{
-		v1alpha1.CheckpointCreated:   c.createdHandler,
-		v1alpha1.CheckpointPending:   c.pendingHandler,
-		v1alpha1.Checkpointing:       c.checkpointingHandler,
-		v1alpha1.Checkpointed:        c.checkpointedHandler,
-		v1alpha1.CheckpointMigrating: c.migratingHandler,
+		v1alpha1.CheckpointCreated:       c.createdHandler,
+		v1alpha1.CheckpointPending:       c.pendingHandler,
+		v1alpha1.Checkpointing:           c.checkpointingHandler,
+		v1alpha1.Checkpointed:            c.checkpointedHandler,
+		v1alpha1.AutoMigrationSubmitting: c.submittingHandler,
 	}
 
 	return c
@@ -128,7 +128,7 @@ func (c *Controller) pendingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoi
 	var job batchv1.Job
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: util.GritAgentJobName(ckpt, nil)}, &job); err == nil {
 		ckpt.Status.Phase = v1alpha1.Checkpointing
-		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsReady", fmt.Sprintf("grit agent job(%s/%s) for checkpoint is created", job.Namespace, job.Name))
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.Checkpointing), "GritAgentIsCreated", fmt.Sprintf("grit agent job(%s/%s) for checkpoint is created", job.Namespace, job.Name))
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -201,7 +201,7 @@ func jobCompletedOrFailed(job *batchv1.Job) (bool, bool) {
 }
 
 // checkpointedHandler is used for garbage collecting grit agent pod. then pvc for cloud storage can be used for restoring.
-// if checkpoint.Spec.AutoMigration is true, upgrade phase to checkpoint migrating.
+// if checkpoint.Spec.AutoMigration is true, upgrade phase to checkpoint Submitting.
 func (c *Controller) checkpointedHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
 	var gritAgentJob batchv1.Job
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: util.GritAgentJobName(ckpt, nil)}, &gritAgentJob); client.IgnoreNotFound(err) != nil {
@@ -213,22 +213,22 @@ func (c *Controller) checkpointedHandler(ctx context.Context, ckpt *v1alpha1.Che
 		}
 	} else { // grit agent job is deleted
 		if ckpt.Spec.AutoMigration {
-			ckpt.Status.Phase = v1alpha1.CheckpointMigrating
-			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointMigrating), "CheckpointedCompleted", "auto migrating is true and checkpoint task is completed.")
+			ckpt.Status.Phase = v1alpha1.AutoMigrationSubmitting
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.AutoMigrationSubmitting), "CheckpointedCompleted", "auto migration is true and start to submit migration")
 		}
 	}
 
 	return nil
 }
 
-// migratingHandler is used for creating Restore resource and deleting checkpointed pod.
-func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
+// submittingHandler is used for submitting Restore resource and deleting checkpointed pod.
+func (c *Controller) submittingHandler(ctx context.Context, ckpt *v1alpha1.Checkpoint) error {
 	// get checkpoint pod
 	var checkpointPod corev1.Pod
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ckpt.Namespace, Name: ckpt.Spec.PodName}, &checkpointPod); err != nil {
 		if apierrors.IsNotFound(err) {
 			ckpt.Status.Phase = v1alpha1.CheckpointFailed
-			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodIsRemoved", fmt.Sprintf("migrating pod(%s) in checkpoint has been removed", ckpt.Spec.PodName))
+			util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodIsRemoved", fmt.Sprintf("checkpointed pod(%s) referenced by checkpoint resource(%s) has been removed", ckpt.Spec.PodName, ckpt.Name))
 			return nil
 		} else {
 			return err
@@ -246,7 +246,7 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 
 	if ownerRef == nil {
 		ckpt.Status.Phase = v1alpha1.CheckpointFailed
-		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodHasNoOwnerReference", fmt.Sprintf("migrating pod(%s) in checkpoint has no owner reference", ckpt.Spec.PodName))
+		util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointFailed), "PodHasNoOwnerReference", fmt.Sprintf("checkpointed pod(%s) referenced by checkpoint resource(%s) has no owner reference", ckpt.Spec.PodName, ckpt.Name))
 		return nil
 	}
 
@@ -276,8 +276,8 @@ func (c *Controller) migratingHandler(ctx context.Context, ckpt *v1alpha1.Checkp
 		}
 	}
 
-	ckpt.Status.Phase = v1alpha1.CheckpointMigrated
-	util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.CheckpointMigrated), "AutoMigratingCompleted", "restore resource is created and checkpoint pod is removed.")
+	ckpt.Status.Phase = v1alpha1.AutoMigrationSubmitted
+	util.UpdateCondition(c.clock, &ckpt.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.AutoMigrationSubmitted), "SubmittingCompleted", "restore resource is created and checkpoint pod is removed.")
 	return nil
 }
 

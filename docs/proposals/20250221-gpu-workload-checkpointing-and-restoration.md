@@ -126,7 +126,8 @@ Moreover, if the `autoMigration` field is set in the Checkpoint CR, GRIT control
 ![checkpoint state machine](../img/checkpoint-state-machine.png)
 
 - each state related detailed information will be recorded into Checkpoint.Status.Conditions field.
-- each state will be updated to Checkpoint.Status.Phase field. 
+- each state will be updated to Checkpoint.Status.Phase field.
+- when autoMigration is true, state will move forward to submiting/submitted state from checkpointed state after grit-agent is removed.
 
 #### State Machine of Pod Restore
 
@@ -141,13 +142,13 @@ Moreover, if the `autoMigration` field is set in the Checkpoint CR, GRIT control
 type CheckpointPhase string
 
 const (
-  CheckpointCreated   CheckpointPhase = "Created"
-  CheckpointPending   CheckpointPhase = "Pending"
-  Checkpointing       CheckpointPhase = "Checkpointing"
-  Checkpointed        CheckpointPhase = "Checkpointed"
-  CheckpointMigrating CheckpointPhase = "Migrating"
-  CheckpointMigrated  CheckpointPhase = "Migrated"
-  CheckpointFailed    CheckpointPhase = "Failed"
+	CheckpointCreated       CheckpointPhase = "Created"
+	CheckpointPending       CheckpointPhase = "Pending"
+	Checkpointing           CheckpointPhase = "Checkpointing"
+	Checkpointed            CheckpointPhase = "Checkpointed"
+	AutoMigrationSubmitting CheckpointPhase = "Submitting"
+	AutoMigrationSubmitted   CheckpointPhase = "Submitted"
+	CheckpointFailed        CheckpointPhase = "Failed"
 )
 
 type CheckpointSpec struct {
@@ -171,7 +172,7 @@ type CheckpointStatus struct {
   PodSpecHash string
   // PodUid is used for storing pod uid which will be used to construct log path of pod.
   PodUid string
-  // state machine of Checkpoint Phase: Pending --> Checkpointing --> Checkpointed or Failed.
+  // state machine of Checkpoint Phase: Created --> Pending --> Checkpointing --> Checkpointed --> Submitting --> Submitted or Failed.
   Phase CheckpointPhase
   // current state of pod checkpoint
   Conditions []metav1.Condition

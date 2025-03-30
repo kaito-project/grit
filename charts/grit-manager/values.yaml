@@ -4,6 +4,7 @@ log:
 replicaCount: 1
 certDuration: 87600h
 nameOverrider: ""
+hostPath: /mnt/grit-agent
 
 image:
   gritmanager:

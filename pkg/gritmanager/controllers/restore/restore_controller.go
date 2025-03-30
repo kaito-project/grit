@@ -123,6 +123,9 @@ func (c *Controller) createdHandler(ctx context.Context, restore *v1alpha1.Resto
 		return nil
 	}
 
+	if len(pods[0].Spec.NodeName) != 0 {
+		restore.Status.NodeName = pods[0].Spec.NodeName
+	}
 	restore.Status.TargetPod = pods[0].Name
 	restore.Status.Phase = v1alpha1.RestorePending
 	util.UpdateCondition(c.clock, &restore.Status.Conditions, metav1.ConditionTrue, string(v1alpha1.RestorePending), "RestorationPodSelected", fmt.Sprintf("pod(%s) is selected as a restoration pod", pods[0].Name))

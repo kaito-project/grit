@@ -68,8 +68,8 @@ func (w *RestoreWebhook) ValidateCreate(ctx context.Context, obj runtime.Object)
 
 	// related checkpoint resource should has completed checkpoint process
 	if ckpt.Status.Phase != v1alpha1.Checkpointed &&
-		ckpt.Status.Phase != v1alpha1.CheckpointMigrating &&
-		ckpt.Status.Phase != v1alpha1.CheckpointMigrated {
+		ckpt.Status.Phase != v1alpha1.AutoMigrationSubmitting &&
+		ckpt.Status.Phase != v1alpha1.AutoMigrationSubmitted {
 		return admission.Warnings{}, fmt.Errorf("restore(%s) referenced checkpoint(%s) has not completed checkpoint process", restore.Name, ckpt.Name)
 	}
 
