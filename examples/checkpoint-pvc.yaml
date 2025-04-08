@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: cr-demo-pvc9
+  name: ckpt-store
   namespace: default
 spec:
   accessModes:

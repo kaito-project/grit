@@ -1,10 +1,10 @@
 apiVersion: kaito.sh/v1alpha1
 kind: Checkpoint
 metadata:
-  name: cr-demo9
+  name: demo
   namespace: default
 spec:
   autoMigration: false
-  podName: "falcon7b-tuning-cp4kz"
+  podName: "falcon7b-tuning-cp4kz" # your pod name
   volumeClaim:
-    claimName: "cr-demo-pvc9"
+    claimName: "ckpt-store"
