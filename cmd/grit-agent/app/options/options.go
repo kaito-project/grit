@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/spf13/pflag"
+
+	"github.com/kaito-project/grit/pkg/gritagent/syncer"
 )
 
 type GritAgentOptions struct {
@@ -16,6 +18,7 @@ type GritAgentOptions struct {
 	Action          string
 	SrcDir          string
 	DstDir          string
+	Syncer          syncer.Syncer
 
 	RuntimeCheckpointOptions
 }

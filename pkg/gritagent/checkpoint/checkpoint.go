@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/kaito-project/grit/cmd/grit-agent/app/options"
-	"github.com/kaito-project/grit/pkg/gritagent/copy"
 )
 
 func RunCheckpoint(ctx context.Context, opts *options.GritAgentOptions) error {
@@ -17,5 +16,5 @@ func RunCheckpoint(ctx context.Context, opts *options.GritAgentOptions) error {
 	}
 
 	// transfer checkpointed data to cloud storage
-	return copy.TransferData(ctx, opts.SrcDir, opts.DstDir)
+	return opts.Syncer.Sync(ctx, opts.SrcDir, opts.DstDir)
 }

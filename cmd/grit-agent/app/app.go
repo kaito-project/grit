@@ -20,6 +20,7 @@ import (
 	"github.com/kaito-project/grit/pkg/apis/v1alpha1"
 	"github.com/kaito-project/grit/pkg/gritagent/checkpoint"
 	"github.com/kaito-project/grit/pkg/gritagent/restore"
+	"github.com/kaito-project/grit/pkg/gritagent/syncer/file"
 	"github.com/kaito-project/grit/pkg/injections"
 )
 
@@ -56,6 +57,9 @@ func Run(opts *options.GritAgentOptions) error {
 	//logging
 	logger := klog.FromContext(ctx)
 	log.SetLogger(logger)
+
+	// init checkpointed data syncer
+	opts.Syncer = file.NewFileSyncer()
 
 	var handler func(context.Context, *options.GritAgentOptions) error
 

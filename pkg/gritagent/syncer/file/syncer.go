@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-package copy
+package file
 
 import (
 	"context"
@@ -12,9 +12,21 @@ import (
 
 	"go.uber.org/multierr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/kaito-project/grit/pkg/gritagent/syncer"
 )
 
-func TransferData(ctx context.Context, srcDir, dstDir string) error {
+type fileSyncerImpl struct{}
+
+func NewFileSyncer() syncer.Syncer {
+	return &fileSyncerImpl{}
+}
+
+func (sfi *fileSyncerImpl) Name() string {
+	return "FileSyncer"
+}
+
+func (sfi *fileSyncerImpl) Sync(ctx context.Context, srcDir, dstDir string) error {
 	var wg sync.WaitGroup
 	errs := make([]error, 20)
 	workerChan := make(chan struct{}, 10)
@@ -87,16 +99,4 @@ func copyFile(srcFile, dstFile string) error {
 	}
 
 	return os.Chmod(dstFile, info.Mode())
-}
-
-func CreateSentinelFile(dir, fileName string) error {
-	filePath := filepath.Join(dir, fileName)
-	f, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = f.WriteString("Transfer Completed\n")
-	return err
 }
