@@ -1,4 +1,6 @@
 # GRIT: GPU workload checkpointing and restoration
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fkaito-project%2Fgrit.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fkaito-project%2Fgrit?ref=badge_shield)
+
 
 GRIT is a prototype designed to automate the GPU workload migration in a Kubernetes cluster. It enables users to checkpoint the states of a GPU workload and restore them at a later time in a different node with no impact on the final result of the workload.
 
@@ -78,6 +80,9 @@ This demo shows how to use GRIT to migrate a Katio finetuning job from one GPU n
 # License
 
 See [MIT LICENSE](LICENSE).
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fkaito-project%2Fgrit.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fkaito-project%2Fgrit?ref=badge_large)
 
 # Contact
 
